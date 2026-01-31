@@ -17,7 +17,7 @@ app.use(express.json());
 const MONGO_URI = process.env.MONGO_URI;
 
 if (!MONGO_URI) {
-  console.error('❌ MONGO_URI is missing in environment variables');
+  console.error('❌ MONGO_URI is missing');
   process.exit(1);
 }
 
@@ -25,7 +25,7 @@ mongoose
   .connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => {
-    console.error('❌ MongoDB connection error:', err);
+    console.error('❌ MongoDB error:', err);
     process.exit(1);
   });
 
@@ -88,10 +88,6 @@ app.post('/razorpay/create-order', async (req, res) => {
     const order = await Order.findOne({ orderId });
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    if (order.status !== 'PENDING_PAYMENT') {
-      return res.status(400).json({ error: 'Invalid order status' });
-    }
-
     const razorpayOrder = await razorpay.orders.create({
       amount: order.totalAmount * 100,
       currency: 'INR',
@@ -100,7 +96,6 @@ app.post('/razorpay/create-order', async (req, res) => {
     });
 
     order.paymentInfo = {
-      ...(order.paymentInfo || {}),
       provider: 'RAZORPAY',
       razorpayOrderId: razorpayOrder.id,
     };
@@ -118,16 +113,10 @@ app.post('/razorpay/create-order', async (req, res) => {
   }
 });
 
-/* ------------------ VERIFY RAZORPAY PAYMENT ------------------ */
+/* ------------------ VERIFY PAYMENT (CLIENT CALLBACK) ------------------ */
 app.post('/razorpay/verify-payment', async (req, res) => {
   try {
-    console.log("🔥 VERIFY PAYMENT HIT:", req.body);
-
-    const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
-    } = req.body;
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
     const body = razorpay_order_id + '|' + razorpay_payment_id;
 
@@ -137,81 +126,88 @@ app.post('/razorpay/verify-payment', async (req, res) => {
       .digest('hex');
 
     if (expectedSignature !== razorpay_signature) {
-      console.log("❌ Signature mismatch");
       return res.status(400).json({ success: false });
     }
 
-    const updatedOrder = await Order.findOneAndUpdate(
+    await Order.findOneAndUpdate(
       { 'paymentInfo.razorpayOrderId': razorpay_order_id },
       {
-        $set: {
-          status: 'PAID',
-          paidAt: new Date(),
-          'paymentInfo.razorpayPaymentId': razorpay_payment_id,
-        },
-      },
-      { new: true }
+        status: 'PAID',
+        paidAt: new Date(),
+        'paymentInfo.razorpayPaymentId': razorpay_payment_id,
+      }
     );
 
-    if (!updatedOrder) {
-      console.log('❌ Order NOT found for Razorpay Order ID:', razorpay_order_id);
-      return res.status(404).json({ success: false });
-    }
-
-    console.log('✅ Order marked PAID:', updatedOrder.orderId);
     res.json({ success: true });
   } catch (err) {
-    console.error('❌ Verify payment error:', err);
+    console.error('❌ Verify error:', err);
     res.status(500).json({ success: false });
+  }
+});
+
+/* ------------------ RAZORPAY WEBHOOK (AUTO CONFIRM) ------------------ */
+app.post('/razorpay/webhook', express.json({ type: '*/*' }), async (req, res) => {
+  try {
+    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    const signature = req.headers['x-razorpay-signature'];
+
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(JSON.stringify(req.body))
+      .digest('hex');
+
+    if (signature !== expected) {
+      console.log('❌ Webhook signature mismatch');
+      return res.status(400).send('Invalid signature');
+    }
+
+    if (req.body.event === 'payment.captured') {
+      const payment = req.body.payload.payment.entity;
+
+      const order = await Order.findOneAndUpdate(
+        { 'paymentInfo.razorpayOrderId': payment.order_id },
+        {
+          status: 'PAID',
+          paidAt: new Date(),
+          'paymentInfo.razorpayPaymentId': payment.id,
+        },
+        { new: true }
+      );
+
+      if (order) {
+        console.log('✅ Webhook marked PAID:', order.orderId);
+      }
+    }
+
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error('❌ Webhook error:', err);
+    res.status(500).send('Webhook error');
   }
 });
 
 /* ------------------ CHECK ORDER STATUS ------------------ */
 app.get('/order/:id/status', async (req, res) => {
-  try {
-    const order = await Order.findOne({ orderId: req.params.id });
-    if (!order) return res.status(404).json({ error: 'Order not found' });
-
-    if (order.status === 'PENDING_PAYMENT' && Date.now() > order.expiresAt) {
-      order.status = 'EXPIRED';
-      await order.save();
-    }
-
-    res.json({
-      orderId: order.orderId,
-      status: order.status,
-      code: order.code,
-      totalAmount: order.totalAmount,
-      canteen: order.canteen,
-    });
-  } catch (err) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-/* ------------------ LIST ORDERS (ADMIN) ------------------ */
-app.get('/orders', async (req, res) => {
-  const orders = await Order.find().sort({ createdAt: -1 });
-  res.json(orders);
-});
-
-/* ------------------ ADMIN CONFIRM (OPTIONAL) ------------------ */
-app.post('/admin/confirm-order', async (req, res) => {
-  const { orderId } = req.body;
-  const order = await Order.findOne({ orderId });
+  const order = await Order.findOne({ orderId: req.params.id });
   if (!order) return res.status(404).json({ error: 'Order not found' });
 
-  order.status = 'PAID';
-  order.paidAt = new Date();
-  order.paymentInfo = { method: 'MANUAL_CONFIRM' };
+  if (order.status === 'PENDING_PAYMENT' && Date.now() > order.expiresAt) {
+    order.status = 'EXPIRED';
+    await order.save();
+  }
 
-  await order.save();
-  res.json({ ok: true });
+  res.json({
+    orderId: order.orderId,
+    status: order.status,
+    code: order.code,
+    totalAmount: order.totalAmount,
+    canteen: order.canteen,
+  });
 });
 
-/* ------------------ ADMIN PAGE ------------------ */
-app.get('/admin', (req, res) => {
-  res.send(`<h2>Admin Panel</h2><p>Use /orders API</p>`);
+/* ------------------ LIST ORDERS ------------------ */
+app.get('/orders', async (req, res) => {
+  res.json(await Order.find().sort({ createdAt: -1 }));
 });
 
 /* ------------------ START SERVER ------------------ */
