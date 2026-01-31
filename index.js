@@ -1,7 +1,6 @@
 // index.js
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
-
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -11,22 +10,12 @@ const Order = require('./models/Order');
 
 const app = express();
 app.use(cors());
-// Allow JSON parsing for all routes EXCEPT Razorpay webhook
-app.use((req, res, next) => {
-  if (req.originalUrl === '/razorpay/webhook') {
-    next(); // skip JSON parsing
-  } else {
-    express.json()(req, res, next);
-  }
-});
+app.use(express.json()); // NORMAL routes only
 
-
-
-/* ------------------ MONGODB CONNECTION ------------------ */
+/* ------------------ MONGODB ------------------ */
 const MONGO_URI = process.env.MONGO_URI;
-
 if (!MONGO_URI) {
-  console.error('❌ MONGO_URI is missing');
+  console.error('❌ MONGO_URI missing');
   process.exit(1);
 }
 
@@ -34,13 +23,13 @@ mongoose
   .connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => {
-    console.error('❌ MongoDB error:', err);
+    console.error('❌ MongoDB error', err);
     process.exit(1);
   });
 
-/* ------------------ RAZORPAY CONFIG ------------------ */
-console.log("KEY =", process.env.RAZORPAY_KEY_ID);
-console.log("SECRET =", process.env.RAZORPAY_KEY_SECRET ? "SET" : "MISSING");
+/* ------------------ RAZORPAY ------------------ */
+console.log('KEY =', process.env.RAZORPAY_KEY_ID);
+console.log('SECRET =', process.env.RAZORPAY_KEY_SECRET ? 'SET' : 'MISSING');
 
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -61,29 +50,25 @@ function generateCode(len = 6) {
 app.post('/order', async (req, res) => {
   try {
     const { canteen, items, totalAmount } = req.body;
-
     if (!canteen || totalAmount == null) {
-      return res.status(400).json({ error: 'canteen and totalAmount required' });
+      return res.status(400).json({ error: 'canteen & totalAmount required' });
     }
 
     const orderId = uuidv4();
-    const code = generateCode();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
-    const order = new Order({
+    const order = await Order.create({
       orderId,
-      code,
+      code: generateCode(),
       canteen,
       items: items || {},
       totalAmount,
       status: 'PENDING_PAYMENT',
-      expiresAt,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
 
-    await order.save();
-    res.status(201).json({ orderId, code, expiresAt });
-  } catch (err) {
-    console.error('❌ Create order error:', err);
+    res.status(201).json(order);
+  } catch (e) {
+    console.error(e);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -92,186 +77,35 @@ app.post('/order', async (req, res) => {
 app.post('/razorpay/create-order', async (req, res) => {
   try {
     const { orderId } = req.body;
-    if (!orderId) return res.status(400).json({ error: 'orderId required' });
-
     const order = await Order.findOne({ orderId });
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    const razorpayOrder = await razorpay.orders.create({
+    const rpOrder = await razorpay.orders.create({
       amount: order.totalAmount * 100,
       currency: 'INR',
-      receipt: order.orderId,
+      receipt: order.orderId, // 🔑 VERY IMPORTANT
       payment_capture: 1,
     });
 
     order.paymentInfo = {
       provider: 'RAZORPAY',
-      razorpayOrderId: razorpayOrder.id,
+      razorpayOrderId: rpOrder.id,
     };
     await order.save();
 
     res.json({
       key: process.env.RAZORPAY_KEY_ID,
-      razorpayOrderId: razorpayOrder.id,
-      amount: razorpayOrder.amount,
-      currency: razorpayOrder.currency,
+      razorpayOrderId: rpOrder.id,
+      amount: rpOrder.amount,
+      currency: rpOrder.currency,
     });
-  } catch (err) {
-    console.error('❌ Razorpay order error:', err);
-    res.status(500).json({ error: 'Server error' });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Razorpay error' });
   }
 });
 
-/* ------------------ VERIFY PAYMENT (CLIENT CALLBACK) ------------------ */
-app.post('/razorpay/verify-payment', async (req, res) => {
-  try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-    const body = razorpay_order_id + '|' + razorpay_payment_id;
-
-    const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-      .update(body)
-      .digest('hex');
-
-    if (expectedSignature !== razorpay_signature) {
-      return res.status(400).json({ success: false });
-    }
-
-    await Order.findOneAndUpdate(
-      { 'paymentInfo.razorpayOrderId': razorpay_order_id },
-      {
-        status: 'PAID',
-        paidAt: new Date(),
-        'paymentInfo.razorpayPaymentId': razorpay_payment_id,
-      }
-    );
-
-    res.json({ success: true });
-  } catch (err) {
-    console.error('❌ Verify error:', err);
-    res.status(500).json({ success: false });
-  }
-});
-/* ------------------ RAZORPAY WEBHOOK ------------------ */
-app.post('/razorpay/webhook', express.json({
-  verify: (req, res, buf) => {
-    req.rawBody = buf;
-  }
-}), async (req, res) => {
-  try {
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-
-    const signature = req.headers['x-razorpay-signature'];
-
-    const expectedSignature = crypto
-      .createHmac('sha256', secret)
-      .update(req.rawBody)
-      .digest('hex');
-
-    if (signature !== expectedSignature) {
-      console.log('❌ Webhook signature mismatch');
-      return res.status(400).send('Invalid signature');
-    }
-
-    const event = req.body.event;
-
-    if (event === 'payment.captured') {
-      const payment = req.body.payload.payment.entity;
-      const razorpayOrderId = payment.order_id;
-      const razorpayPaymentId = payment.id;
-
-      const order = await Order.findOneAndUpdate(
-        { 'paymentInfo.razorpayOrderId': razorpayOrderId },
-        {
-          $set: {
-            status: 'PAID',
-            paidAt: new Date(),
-            'paymentInfo.razorpayPaymentId': razorpayPaymentId,
-          },
-        },
-        { new: true }
-      );
-
-      if (order) {
-        console.log('✅ Webhook marked PAID:', order.orderId);
-      } else {
-        console.log('❌ No order found for webhook:', razorpayOrderId);
-      }
-    }
-
-    res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error('❌ Webhook error:', err);
-    res.status(500).send('Webhook error');
-  }
-});
-
-
-/* ------------------ RAZORPAY WEBHOOK (AUTO CONFIRM) ------------------ */
-app.post('/razorpay/webhook', express.json({ type: '*/*' }), async (req, res) => {
-  try {
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    const signature = req.headers['x-razorpay-signature'];
-
-    const expected = crypto
-      .createHmac('sha256', secret)
-      .update(JSON.stringify(req.body))
-      .digest('hex');
-
-    if (signature !== expected) {
-      console.log('❌ Webhook signature mismatch');
-      return res.status(400).send('Invalid signature');
-    }
-
-    if (req.body.event === 'payment.captured') {
-      const payment = req.body.payload.payment.entity;
-
-      const order = await Order.findOneAndUpdate(
-        { 'paymentInfo.razorpayOrderId': payment.order_id },
-        {
-          status: 'PAID',
-          paidAt: new Date(),
-          'paymentInfo.razorpayPaymentId': payment.id,
-        },
-        { new: true }
-      );
-
-      if (order) {
-        console.log('✅ Webhook marked PAID:', order.orderId);
-      }
-    }
-
-    res.json({ status: 'ok' });
-  } catch (err) {
-    console.error('❌ Webhook error:', err);
-    res.status(500).send('Webhook error');
-  }
-});
-
-/* ------------------ CHECK ORDER STATUS ------------------ */
-app.get('/order/:id/status', async (req, res) => {
-  const order = await Order.findOne({ orderId: req.params.id });
-  if (!order) return res.status(404).json({ error: 'Order not found' });
-
-  if (order.status === 'PENDING_PAYMENT' && Date.now() > order.expiresAt) {
-    order.status = 'EXPIRED';
-    await order.save();
-  }
-
-  res.json({
-    orderId: order.orderId,
-    status: order.status,
-    code: order.code,
-    totalAmount: order.totalAmount,
-    canteen: order.canteen,
-  });
-});
-
-/* ------------------ LIST ORDERS ------------------ */
-app.get('/orders', async (req, res) => {
-  res.json(await Order.find().sort({ createdAt: -1 }));
-});
+/* ------------------ RAZORPAY WEBHOOK (ONLY ONE) ------------------ */
 app.post(
   '/razorpay/webhook',
   express.raw({ type: 'application/json' }),
@@ -280,13 +114,13 @@ app.post(
       const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
       const signature = req.headers['x-razorpay-signature'];
 
-      const expectedSignature = crypto
+      const expected = crypto
         .createHmac('sha256', secret)
         .update(req.body)
         .digest('hex');
 
-      if (signature !== expectedSignature) {
-        console.log('❌ Webhook signature mismatch');
+      if (signature !== expected) {
+        console.log('❌ Invalid webhook signature');
         return res.status(400).send('Invalid signature');
       }
 
@@ -294,36 +128,48 @@ app.post(
 
       if (event.event === 'payment.captured') {
         const payment = event.payload.payment.entity;
+        const appOrderId = payment.receipt; // 🔑 YOUR UUID
 
         const order = await Order.findOneAndUpdate(
-          { 'paymentInfo.razorpayOrderId': payment.order_id },
+          { orderId: appOrderId },
           {
-            $set: {
-              status: 'PAID',
-              paidAt: new Date(),
-              'paymentInfo.razorpayPaymentId': payment.id,
-            },
+            status: 'PAID',
+            paidAt: new Date(),
+            'paymentInfo.razorpayPaymentId': payment.id,
+            'paymentInfo.razorpayOrderId': payment.order_id,
           },
           { new: true }
         );
 
         if (order) {
-          console.log('✅ Order marked PAID via webhook:', order.orderId);
+          console.log('✅ Order PAID:', order.orderId);
         } else {
-          console.log('❌ No order found for:', payment.order_id);
+          console.log('❌ Order not found for receipt:', appOrderId);
         }
       }
 
-      res.status(200).json({ ok: true });
-    } catch (err) {
-      console.error('❌ Webhook error:', err);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('❌ Webhook error:', e);
       res.status(500).send('Webhook error');
     }
   }
 );
 
-/* ------------------ START SERVER ------------------ */
+/* ------------------ ORDER STATUS ------------------ */
+app.get('/order/:id/status', async (req, res) => {
+  const order = await Order.findOne({ orderId: req.params.id });
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  res.json(order);
+});
+
+/* ------------------ ADMIN ------------------ */
+app.get('/orders', async (req, res) => {
+  res.json(await Order.find().sort({ createdAt: -1 }));
+});
+
+/* ------------------ START ------------------ */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () =>
-  console.log(`🚀 Server running on port ${PORT}`)
+  console.log(`🚀 Server running on ${PORT}`)
 );
