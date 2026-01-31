@@ -32,6 +32,7 @@ mongoose
 /* ------------------ RAZORPAY CONFIG ------------------ */
 console.log("KEY =", process.env.RAZORPAY_KEY_ID);
 console.log("SECRET =", process.env.RAZORPAY_KEY_SECRET ? "SET" : "MISSING");
+
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
@@ -71,7 +72,6 @@ app.post('/order', async (req, res) => {
     });
 
     await order.save();
-
     res.status(201).json({ orderId, code, expiresAt });
   } catch (err) {
     console.error('❌ Create order error:', err);
@@ -83,14 +83,10 @@ app.post('/order', async (req, res) => {
 app.post('/razorpay/create-order', async (req, res) => {
   try {
     const { orderId } = req.body;
-    if (!orderId) {
-      return res.status(400).json({ error: 'orderId required' });
-    }
+    if (!orderId) return res.status(400).json({ error: 'orderId required' });
 
     const order = await Order.findOne({ orderId });
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
+    if (!order) return res.status(404).json({ error: 'Order not found' });
 
     if (order.status !== 'PENDING_PAYMENT') {
       return res.status(400).json({ error: 'Invalid order status' });
@@ -125,6 +121,8 @@ app.post('/razorpay/create-order', async (req, res) => {
 /* ------------------ VERIFY RAZORPAY PAYMENT ------------------ */
 app.post('/razorpay/verify-payment', async (req, res) => {
   try {
+    console.log("🔥 VERIFY PAYMENT HIT:", req.body);
+
     const {
       razorpay_order_id,
       razorpay_payment_id,
@@ -139,6 +137,7 @@ app.post('/razorpay/verify-payment', async (req, res) => {
       .digest('hex');
 
     if (expectedSignature !== razorpay_signature) {
+      console.log("❌ Signature mismatch");
       return res.status(400).json({ success: false });
     }
 
@@ -146,23 +145,20 @@ app.post('/razorpay/verify-payment', async (req, res) => {
       { 'paymentInfo.razorpayOrderId': razorpay_order_id },
       {
         $set: {
-        status: 'PAID',
-        paidAt: new Date(),
-        'paymentInfo.razorpayPaymentId': razorpay_payment_id,
+          status: 'PAID',
+          paidAt: new Date(),
+          'paymentInfo.razorpayPaymentId': razorpay_payment_id,
         },
       },
-      { new : true }
+      { new: true }
     );
 
-    if(!updatedOrder){
-      console.log(
-        '❌ Order NOT found for Razorpay Order ID:',
-        razorpay_order_id
-      );
+    if (!updatedOrder) {
+      console.log('❌ Order NOT found for Razorpay Order ID:', razorpay_order_id);
       return res.status(404).json({ success: false });
     }
-    console.log('✅ Order marked PAID:', updatedOrder.orderId);
 
+    console.log('✅ Order marked PAID:', updatedOrder.orderId);
     res.json({ success: true });
   } catch (err) {
     console.error('❌ Verify payment error:', err);
