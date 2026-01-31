@@ -45,7 +45,7 @@ function generateCode(len = 6) {
   return s;
 }
 
-/* ------------------ CREATE ORDER (YOUR EXISTING LOGIC) ------------------ */
+/* ------------------ CREATE ORDER ------------------ */
 app.post('/order', async (req, res) => {
   try {
     const { canteen, items, totalAmount } = req.body;
@@ -81,7 +81,6 @@ app.post('/order', async (req, res) => {
 app.post('/razorpay/create-order', async (req, res) => {
   try {
     const { orderId } = req.body;
-
     if (!orderId) {
       return res.status(400).json({ error: 'orderId required' });
     }
@@ -96,7 +95,7 @@ app.post('/razorpay/create-order', async (req, res) => {
     }
 
     const razorpayOrder = await razorpay.orders.create({
-      amount: order.totalAmount * 100, // INR → paise
+      amount: order.totalAmount * 100,
       currency: 'INR',
       receipt: order.orderId,
       payment_capture: 1,
@@ -106,7 +105,6 @@ app.post('/razorpay/create-order', async (req, res) => {
       provider: 'RAZORPAY',
       razorpayOrderId: razorpayOrder.id,
     };
-
     await order.save();
 
     res.json({
@@ -186,7 +184,7 @@ app.get('/orders', async (req, res) => {
   res.json(orders);
 });
 
-/* ------------------ ADMIN CONFIRM (OPTIONAL FALLBACK) ------------------ */
+/* ------------------ ADMIN CONFIRM (OPTIONAL) ------------------ */
 app.post('/admin/confirm-order', async (req, res) => {
   const { orderId } = req.body;
   const order = await Order.findOne({ orderId });
