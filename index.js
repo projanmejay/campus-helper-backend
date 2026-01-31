@@ -104,6 +104,7 @@ app.post('/razorpay/create-order', async (req, res) => {
     });
 
     order.paymentInfo = {
+      ...(order.paymentInfo || {}),
       provider: 'RAZORPAY',
       razorpayOrderId: razorpayOrder.id,
     };
@@ -141,14 +142,26 @@ app.post('/razorpay/verify-payment', async (req, res) => {
       return res.status(400).json({ success: false });
     }
 
-    await Order.findOneAndUpdate(
+    const updatedOrder = await Order.findOneAndUpdate(
       { 'paymentInfo.razorpayOrderId': razorpay_order_id },
       {
+        $set: {
         status: 'PAID',
         paidAt: new Date(),
         'paymentInfo.razorpayPaymentId': razorpay_payment_id,
-      }
+        },
+      },
+      { new : true }
     );
+
+    if(!updatedOrder){
+      console.log(
+        '❌ Order NOT found for Razorpay Order ID:',
+        razorpay_order_id
+      );
+      return res.status(404).json({ success: false });
+    }
+    console.log('✅ Order marked PAID:', updatedOrder.orderId);
 
     res.json({ success: true });
   } catch (err) {
