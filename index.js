@@ -13,7 +13,7 @@ const app = express();
 /* ------------------ MIDDLEWARE ------------------ */
 app.use(cors());
 
-// This configuration captures the raw body buffer specifically for the webhook
+// CAPTURE RAW BODY: Essential for Webhook Signature Verification
 app.use(express.json({
   verify: (req, res, buf) => {
     if (req.originalUrl.includes('/razorpay/webhook')) {
@@ -88,9 +88,12 @@ app.post('/razorpay/create-order', async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
     const rpOrder = await razorpay.orders.create({
-      amount: order.totalAmount * 100,
+      amount: order.totalAmount * 100, // Amount in paise
       currency: 'INR',
-      receipt: order.orderId,
+      receipt: order.orderId, // Limited to 40 chars
+      notes: {
+        appOrderId: order.orderId // BACKUP: used in webhook if receipt is missing
+      },
       payment_capture: 1,
     });
 
@@ -113,17 +116,17 @@ app.post('/razorpay/create-order', async (req, res) => {
 });
 
 /* ------------------ RAZORPAY WEBHOOK ------------------ */
-
 app.post('/razorpay/webhook', async (req, res) => {
   try {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     const signature = req.headers['x-razorpay-signature'];
 
     if (!req.rawBody) {
+      console.error('❌ Raw body missing - check middleware order');
       return res.status(400).send('Raw body not captured');
     }
 
-    // Use req.rawBody (the Buffer) for verification
+    // 1. Verify Signature using the Raw Buffer
     const expected = crypto
       .createHmac('sha256', secret)
       .update(req.rawBody)
@@ -134,12 +137,20 @@ app.post('/razorpay/webhook', async (req, res) => {
       return res.status(400).send('Invalid signature');
     }
 
-    // Now parse the raw body to access the event data
+    // 2. Parse the body now that it's verified
     const event = JSON.parse(req.rawBody.toString());
+    console.log('📦 Webhook Event received:', event.event);
 
     if (event.event === 'payment.captured') {
       const payment = event.payload.payment.entity;
-      const appOrderId = payment.receipt;
+      
+      // 3. Resolve Order ID from receipt OR notes
+      const appOrderId = payment.receipt || (payment.notes && payment.notes.appOrderId);
+
+      if (!appOrderId) {
+        console.error('❌ Order ID (receipt) is undefined in payload');
+        return res.status(200).json({ ok: false, error: 'No order ID found' }); 
+      }
 
       const order = await Order.findOneAndUpdate(
         { orderId: appOrderId },
@@ -153,12 +164,13 @@ app.post('/razorpay/webhook', async (req, res) => {
       );
 
       if (order) {
-        console.log('✅ Order PAID:', order.orderId);
+        console.log('✅ Order PAID and Updated:', order.orderId);
       } else {
-        console.log('❌ Order not found for receipt:', appOrderId);
+        console.log('❓ Order ID found but not in DB:', appOrderId);
       }
     }
 
+    // Always send 200 to Razorpay
     res.json({ ok: true });
   } catch (e) {
     console.error('❌ Webhook error:', e);
