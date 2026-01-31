@@ -11,7 +11,16 @@ const Order = require('./models/Order');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Allow JSON parsing for all routes EXCEPT Razorpay webhook
+app.use((req, res, next) => {
+  if (req.originalUrl === '/razorpay/webhook') {
+    next(); // skip JSON parsing
+  } else {
+    express.json()(req, res, next);
+  }
+});
+
+
 
 /* ------------------ MONGODB CONNECTION ------------------ */
 const MONGO_URI = process.env.MONGO_URI;
@@ -263,6 +272,55 @@ app.get('/order/:id/status', async (req, res) => {
 app.get('/orders', async (req, res) => {
   res.json(await Order.find().sort({ createdAt: -1 }));
 });
+app.post(
+  '/razorpay/webhook',
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    try {
+      const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+      const signature = req.headers['x-razorpay-signature'];
+
+      const expectedSignature = crypto
+        .createHmac('sha256', secret)
+        .update(req.body)
+        .digest('hex');
+
+      if (signature !== expectedSignature) {
+        console.log('❌ Webhook signature mismatch');
+        return res.status(400).send('Invalid signature');
+      }
+
+      const event = JSON.parse(req.body.toString());
+
+      if (event.event === 'payment.captured') {
+        const payment = event.payload.payment.entity;
+
+        const order = await Order.findOneAndUpdate(
+          { 'paymentInfo.razorpayOrderId': payment.order_id },
+          {
+            $set: {
+              status: 'PAID',
+              paidAt: new Date(),
+              'paymentInfo.razorpayPaymentId': payment.id,
+            },
+          },
+          { new: true }
+        );
+
+        if (order) {
+          console.log('✅ Order marked PAID via webhook:', order.orderId);
+        } else {
+          console.log('❌ No order found for:', payment.order_id);
+        }
+      }
+
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error('❌ Webhook error:', err);
+      res.status(500).send('Webhook error');
+    }
+  }
+);
 
 /* ------------------ START SERVER ------------------ */
 const PORT = process.env.PORT || 3000;
