@@ -1,6 +1,4 @@
 // index.js
-// npm init -y
-// npm i express cors mongoose uuid
 
 const express = require('express');
 const cors = require('cors');
@@ -14,10 +12,20 @@ app.use(cors());
 app.use(express.json());
 
 /* ------------------ MONGODB CONNECTION ------------------ */
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+  console.error('❌ MONGO_URI is missing in environment variables');
+  process.exit(1);
+}
+
 mongoose
-  .connect(process.env.MONGO_URI)
+  .connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.error('❌ MongoDB error:', err));
+  .catch(err => {
+    console.error('❌ MongoDB connection error:', err);
+    process.exit(1);
+  });
 
 /* ------------------ UTIL ------------------ */
 function generateCode(len = 6) {
@@ -40,7 +48,7 @@ app.post('/order', async (req, res) => {
 
     const orderId = uuidv4();
     const code = generateCode();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
     const order = new Order({
       orderId,
@@ -69,7 +77,9 @@ app.post('/order', async (req, res) => {
 app.get('/order/:id/status', async (req, res) => {
   try {
     const order = await Order.findOne({ orderId: req.params.id });
-    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
 
     if (order.status === 'PENDING_PAYMENT' && Date.now() > order.expiresAt) {
       order.status = 'EXPIRED';
@@ -84,7 +94,7 @@ app.get('/order/:id/status', async (req, res) => {
       canteen: order.canteen,
     });
   } catch (err) {
-    console.error('❌ Status error:', err);
+    console.error('❌ Status check error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -95,7 +105,7 @@ app.get('/orders', async (req, res) => {
     const orders = await Order.find().sort({ createdAt: -1 });
     res.json(orders);
   } catch (err) {
-    console.error('❌ List error:', err);
+    console.error('❌ List orders error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -104,10 +114,14 @@ app.get('/orders', async (req, res) => {
 app.post('/admin/confirm-order', async (req, res) => {
   try {
     const { orderId } = req.body;
-    if (!orderId) return res.status(400).json({ error: 'orderId required' });
+    if (!orderId) {
+      return res.status(400).json({ error: 'orderId required' });
+    }
 
     const order = await Order.findOne({ orderId });
-    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
 
     if (Date.now() > order.expiresAt) {
       order.status = 'EXPIRED';
@@ -117,21 +131,19 @@ app.post('/admin/confirm-order', async (req, res) => {
 
     order.status = 'PAID';
     order.paidAt = new Date();
-    order.paymentInfo = {
-      method: 'MANUAL_CONFIRM',
-    };
+    order.paymentInfo = { method: 'MANUAL_CONFIRM' };
 
     await order.save();
 
     res.json({ ok: true, orderId, status: order.status });
   } catch (err) {
-    console.error('❌ Confirm error:', err);
+    console.error('❌ Admin confirm error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
 /* ------------------ SIMPLE ADMIN PAGE ------------------ */
-app.get('/admin', async (req, res) => {
+app.get('/admin', (req, res) => {
   res.send(`
 <!doctype html>
 <html>
@@ -160,12 +172,12 @@ async function load() {
       <b>Canteen:</b> \${o.canteen}<br/>
       <b>Total:</b> ₹\${o.totalAmount}<br/>
       <b>Status:</b> \${o.status}<br/>
-      <button onclick="confirm('\${o.orderId}')">Confirm</button>
+      <button onclick="confirmOrder('\${o.orderId}')">Confirm</button>
     </div>
   \`).join('');
 }
 
-async function confirm(id) {
+async function confirmOrder(id) {
   const r = await fetch('/admin/confirm-order', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
