@@ -1,8 +1,6 @@
-// index.js
 const nodemailer = require('nodemailer');
 const otpGenerator = require('otp-generator');
 const Otp = require('./models/otp');
-
 
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
@@ -18,7 +16,6 @@ const app = express();
 /* ------------------ MIDDLEWARE ------------------ */
 app.use(cors());
 
-// CAPTURE RAW BODY: Essential for Webhook Signature Verification
 app.use(express.json({
   verify: (req, res, buf) => {
     if (req.originalUrl.includes('/razorpay/webhook')) {
@@ -48,6 +45,22 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
+/* ------------------ GLOBAL EMAIL CONFIG ------------------ */
+// Moving this outside the route prevents creating a new connection pool every request
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS, // Use Gmail App Password here
+  },
+  // Higher timeout for Render cold starts
+  connectionTimeout: 10000, 
+  greetingTimeout: 10000,
+});
+
 /* ------------------ UTIL ------------------ */
 function generateCode(len = 6) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -57,6 +70,7 @@ function generateCode(len = 6) {
   }
   return s;
 }
+
 /* ------------------ SEND EMAIL OTP ------------------ */
 app.post('/auth/send-otp', async (req, res) => {
   try {
@@ -65,7 +79,6 @@ app.post('/auth/send-otp', async (req, res) => {
       return res.status(400).json({ error: 'Email required' });
     }
 
-    // Generate 6-digit numeric OTP
     const otp = otpGenerator.generate(6, {
       digits: true,
       upperCaseAlphabets: false,
@@ -73,37 +86,36 @@ app.post('/auth/send-otp', async (req, res) => {
       specialChars: false,
     });
 
-    // Remove old OTPs for this email
+    // 1. Database Operations (Syncing state first)
     await Otp.deleteMany({ email });
-
-    // Save OTP with expiry (5 minutes)
     await Otp.create({
       email,
       otp,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
 
-    // Email transport
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+    // 2. Email Delivery with Internal Try/Catch
+    // This prevents the whole request from timing out if SMTP fails
+    try {
+      await transporter.sendMail({
+        from: `"Campus Helper" <${process.env.EMAIL_USER}>`,
+        to: email,
+        subject: 'Your Campus Helper OTP',
+        text: `Your OTP is ${otp}. It is valid for 5 minutes.`,
+        html: `<h3>Welcome to Campus Helper</h3><p>Your OTP is: <b>${otp}</b></p>`,
+      });
+      
+      return res.json({ success: true, message: 'OTP sent to email' });
+    } catch (mailErr) {
+      console.error('❌ Nodemailer Error:', mailErr);
+      // We return 200/500 depending on if you want the user to proceed anyway
+      // Since it's OTP, we must return an error to Flutter
+      return res.status(503).json({ error: 'Email service unavailable, try again later' });
+    }
 
-    // Send email
-    await transporter.sendMail({
-      from: `"Campus Helper" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Your Campus Helper OTP',
-      text: `Your OTP is ${otp}. It is valid for 5 minutes.`,
-    });
-
-    res.json({ success: true });
   } catch (err) {
-    console.error('❌ Send OTP error:', err);
-    res.status(500).json({ error: 'Failed to send OTP' });
+    console.error('❌ Auth Route Error:', err);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -142,11 +154,11 @@ app.post('/razorpay/create-order', async (req, res) => {
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
     const rpOrder = await razorpay.orders.create({
-      amount: order.totalAmount * 100, // Amount in paise
+      amount: order.totalAmount * 100, 
       currency: 'INR',
-      receipt: order.orderId, // Limited to 40 chars
+      receipt: order.orderId.substring(0, 40), 
       notes: {
-        appOrderId: order.orderId // BACKUP: used in webhook if receipt is missing
+        appOrderId: order.orderId 
       },
       payment_capture: 1,
     });
@@ -176,55 +188,37 @@ app.post('/razorpay/webhook', async (req, res) => {
     const signature = req.headers['x-razorpay-signature'];
 
     if (!req.rawBody) {
-      console.error('❌ Raw body missing - check middleware order');
+      console.error('❌ Raw body missing');
       return res.status(400).send('Raw body not captured');
     }
 
-    // 1. Verify Signature using the Raw Buffer
     const expected = crypto
       .createHmac('sha256', secret)
       .update(req.rawBody)
       .digest('hex');
 
     if (signature !== expected) {
-      console.log('❌ Invalid webhook signature');
       return res.status(400).send('Invalid signature');
     }
 
-    // 2. Parse the body now that it's verified
     const event = JSON.parse(req.rawBody.toString());
-    console.log('📦 Webhook Event received:', event.event);
 
     if (event.event === 'payment.captured') {
       const payment = event.payload.payment.entity;
-      
-      // 3. Resolve Order ID from receipt OR notes
       const appOrderId = payment.receipt || (payment.notes && payment.notes.appOrderId);
 
-      if (!appOrderId) {
-        console.error('❌ Order ID (receipt) is undefined in payload');
-        return res.status(200).json({ ok: false, error: 'No order ID found' }); 
-      }
+      if (!appOrderId) return res.status(200).json({ ok: false }); 
 
-      const order = await Order.findOneAndUpdate(
+      await Order.findOneAndUpdate(
         { orderId: appOrderId },
         {
           status: 'PAID',
           paidAt: new Date(),
           'paymentInfo.razorpayPaymentId': payment.id,
           'paymentInfo.razorpayOrderId': payment.order_id,
-        },
-        { new: true }
+        }
       );
-
-      if (order) {
-        console.log('✅ Order PAID and Updated:', order.orderId);
-      } else {
-        console.log('❓ Order ID found but not in DB:', appOrderId);
-      }
     }
-
-    // Always send 200 to Razorpay
     res.json({ ok: true });
   } catch (e) {
     console.error('❌ Webhook error:', e);
@@ -243,7 +237,8 @@ app.get('/order/:id/status', async (req, res) => {
 app.get('/orders', async (req, res) => {
   res.json(await Order.find().sort({ createdAt: -1 }));
 });
-/* ------ping*/
+
+/* ------------------ HEALTH CHECK ------------------ */
 app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
@@ -251,5 +246,5 @@ app.get("/health", (req, res) => {
 /* ------------------ START ------------------ */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () =>
-  console.log(`🚀 Server running on ${PORT}`)
+  console.log(`🚀 Server running on port ${PORT}`)
 );
