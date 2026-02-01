@@ -1,4 +1,8 @@
 // index.js
+const nodemailer = require('nodemailer');
+const otpGenerator = require('otp-generator');
+const Otp = require('./models/Otp');
+
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const express = require('express');
@@ -52,6 +56,55 @@ function generateCode(len = 6) {
   }
   return s;
 }
+/* ------------------ SEND EMAIL OTP ------------------ */
+app.post('/auth/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email required' });
+    }
+
+    // Generate 6-digit numeric OTP
+    const otp = otpGenerator.generate(6, {
+      digits: true,
+      upperCaseAlphabets: false,
+      lowerCaseAlphabets: false,
+      specialChars: false,
+    });
+
+    // Remove old OTPs for this email
+    await Otp.deleteMany({ email });
+
+    // Save OTP with expiry (5 minutes)
+    await Otp.create({
+      email,
+      otp,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+    });
+
+    // Email transport
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+
+    // Send email
+    await transporter.sendMail({
+      from: `"Campus Helper" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Your Campus Helper OTP',
+      text: `Your OTP is ${otp}. It is valid for 5 minutes.`,
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('❌ Send OTP error:', err);
+    res.status(500).json({ error: 'Failed to send OTP' });
+  }
+});
 
 /* ------------------ CREATE ORDER ------------------ */
 app.post('/order', async (req, res) => {
