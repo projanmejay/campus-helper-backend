@@ -45,7 +45,15 @@ const razorpay = new Razorpay({
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
-/* ------------------ RESEND EMAIL SETUP ------------------ */
+/* ------------------ RESEND ------------------ */
+if (!process.env.RESEND_API_KEY) {
+  console.error('❌ RESEND_API_KEY missing');
+}
+
+if (!process.env.EMAIL_FROM) {
+  console.error('❌ EMAIL_FROM missing');
+}
+
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 /* ------------------ UTIL ------------------ */
@@ -58,8 +66,10 @@ function generateCode(len = 6) {
   return s;
 }
 
-/* ------------------ SEND EMAIL OTP ------------------ */
+/* ------------------ SEND OTP ------------------ */
 app.post('/auth/send-otp', async (req, res) => {
+  console.log('🔥 /auth/send-otp HIT:', req.body);
+
   try {
     const { email } = req.body;
     if (!email) {
@@ -73,7 +83,6 @@ app.post('/auth/send-otp', async (req, res) => {
       specialChars: false,
     });
 
-    // Save OTP
     await Otp.deleteMany({ email });
     await Otp.create({
       email,
@@ -81,9 +90,10 @@ app.post('/auth/send-otp', async (req, res) => {
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
 
-    // Send email via Resend
+    console.log('📧 Attempting to send OTP to:', email);
+
     try {
-      await resend.emails.send({
+      const result = await resend.emails.send({
         from: process.env.EMAIL_FROM,
         to: email,
         subject: 'Your Campus Helper OTP',
@@ -91,18 +101,20 @@ app.post('/auth/send-otp', async (req, res) => {
           <h3>Welcome to Campus Helper</h3>
           <p>Your OTP is:</p>
           <h2>${otp}</h2>
-          <p>This OTP is valid for 5 minutes.</p>
+          <p>Valid for 5 minutes.</p>
         `,
       });
 
+      console.log('✅ Resend response:', result);
+
       return res.json({ success: true, message: 'OTP sent to email' });
     } catch (mailErr) {
-      console.error('❌ Email Error:', mailErr);
+      console.error('❌ RESEND ERROR FULL:', mailErr);
       return res.status(503).json({ error: 'Email service unavailable' });
     }
 
   } catch (err) {
-    console.error('❌ Auth Error:', err);
+    console.error('❌ AUTH ERROR:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -145,9 +157,7 @@ app.post('/razorpay/create-order', async (req, res) => {
       amount: order.totalAmount * 100,
       currency: 'INR',
       receipt: order.orderId.substring(0, 40),
-      notes: {
-        appOrderId: order.orderId
-      },
+      notes: { appOrderId: order.orderId },
       payment_capture: 1,
     });
 
@@ -214,19 +224,7 @@ app.post('/razorpay/webhook', async (req, res) => {
   }
 });
 
-/* ------------------ ORDER STATUS ------------------ */
-app.get('/order/:id/status', async (req, res) => {
-  const order = await Order.findOne({ orderId: req.params.id });
-  if (!order) return res.status(404).json({ error: 'Order not found' });
-  res.json(order);
-});
-
-/* ------------------ ADMIN ------------------ */
-app.get('/orders', async (req, res) => {
-  res.json(await Order.find().sort({ createdAt: -1 }));
-});
-
-/* ------------------ HEALTH CHECK ------------------ */
+/* ------------------ HEALTH ------------------ */
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
