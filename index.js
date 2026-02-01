@@ -11,7 +11,7 @@ const cors = require('cors');
 const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 
-const Order = require('./models/Order');
+const Order = require('./models/order');
 
 const app = express();
 
