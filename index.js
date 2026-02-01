@@ -1,7 +1,8 @@
 // index.js
 const nodemailer = require('nodemailer');
 const otpGenerator = require('otp-generator');
-const Otp = require('./models/Otp');
+const Otp = require('./models/otp');
+
 
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
