@@ -189,6 +189,10 @@ app.get('/order/:id/status', async (req, res) => {
 app.get('/orders', async (req, res) => {
   res.json(await Order.find().sort({ createdAt: -1 }));
 });
+/* ------ping*/
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
 
 /* ------------------ START ------------------ */
 const PORT = process.env.PORT || 3000;
