@@ -179,6 +179,26 @@ app.post('/order', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+/* ------------------ ORDER STATUS ------------------ */
+app.get('/order/:orderId/status', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+
+    const order = await Order.findOne({ orderId });
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    return res.json({
+      status: order.status,
+      paidAt: order.paidAt || null,
+    });
+  } catch (e) {
+    console.error('❌ ORDER STATUS ERROR:', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 
 /* ------------------ CREATE RAZORPAY ORDER ------------------ */
 app.post('/razorpay/create-order', async (req, res) => {
