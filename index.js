@@ -118,6 +118,40 @@ app.post('/auth/send-otp', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+/* ------------------ VERIFY OTP ------------------ */
+app.post('/auth/verify-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and OTP required' });
+    }
+
+    const record = await Otp.findOne({ email });
+
+    if (!record) {
+      return res.status(400).json({ error: 'Invalid OTP' });
+    }
+
+    if (record.expiresAt < new Date()) {
+      await Otp.deleteOne({ email });
+      return res.status(400).json({ error: 'OTP expired' });
+    }
+
+    if (record.otp !== otp) {
+      return res.status(400).json({ error: 'Invalid OTP' });
+    }
+
+    // OTP is valid → delete it so it can’t be reused
+    await Otp.deleteOne({ email });
+
+    return res.json({ success: true, message: 'OTP verified' });
+
+  } catch (err) {
+    console.error('❌ VERIFY OTP ERROR:', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 /* ------------------ CREATE ORDER ------------------ */
 app.post('/order', async (req, res) => {
