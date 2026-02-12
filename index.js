@@ -14,6 +14,12 @@ const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 
+/* ------------------ CANTEEN NUMBERS ------------------ */
+const CANTEEN_NUMBERS = {
+  "AZAD Hall": "919556418889",   // 🔥 put real canteen number
+  "RP Hall": "919999999999"
+};
+
 /* ------------------ MIDDLEWARE ------------------ */
 app.use(cors());
 
@@ -26,14 +32,7 @@ app.use(express.json({
 }));
 
 /* ------------------ MONGODB ------------------ */
-const MONGO_URI = process.env.MONGO_URI;
-if (!MONGO_URI) {
-  console.error('❌ MONGO_URI missing');
-  process.exit(1);
-}
-
-mongoose
-  .connect(MONGO_URI)
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => {
     console.error('❌ MongoDB error', err);
@@ -59,74 +58,13 @@ function generateCode(len = 6) {
   return s;
 }
 
-/* ------------------ SEND OTP ------------------ */
-app.post('/auth/send-otp', async (req, res) => {
-  try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: 'Email required' });
-
-    const otp = otpGenerator.generate(6, {
-      digits: true,
-      upperCaseAlphabets: false,
-      lowerCaseAlphabets: false,
-      specialChars: false,
-    });
-
-    await Otp.deleteMany({ email });
-    await Otp.create({
-      email,
-      otp,
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
-    });
-
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM,
-      to: email,
-      subject: 'Your Campus Helper OTP',
-      html: `<h3>Your OTP</h3><h2>${otp}</h2><p>Valid for 5 minutes</p>`,
-    });
-
-    res.json({ success: true });
-
-  } catch (err) {
-    console.error('❌ OTP ERROR:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-/* ------------------ VERIFY OTP ------------------ */
-app.post('/auth/verify-otp', async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-
-    const record = await Otp.findOne({ email });
-    if (!record) return res.status(400).json({ error: 'Invalid OTP' });
-
-    if (record.expiresAt < new Date()) {
-      await Otp.deleteOne({ email });
-      return res.status(400).json({ error: 'OTP expired' });
-    }
-
-    if (record.otp !== otp)
-      return res.status(400).json({ error: 'Invalid OTP' });
-
-    await Otp.deleteOne({ email });
-
-    res.json({ success: true });
-
-  } catch (err) {
-    console.error('❌ VERIFY ERROR:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 /* ------------------ CREATE ORDER ------------------ */
 app.post('/order', async (req, res) => {
   try {
-    const { canteen, items, totalAmount, phone } = req.body;
+    const { canteen, items, totalAmount } = req.body;
 
-    if (!canteen || totalAmount == null || !phone)
-      return res.status(400).json({ error: 'canteen, totalAmount & phone required' });
+    if (!canteen || totalAmount == null)
+      return res.status(400).json({ error: 'canteen & totalAmount required' });
 
     const orderId = uuidv4();
 
@@ -136,7 +74,6 @@ app.post('/order', async (req, res) => {
       canteen,
       items: items || {},
       totalAmount,
-      phone, // 🔥 store phone
       status: 'PENDING_PAYMENT',
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
@@ -201,10 +138,12 @@ app.post('/razorpay/webhook', async (req, res) => {
     const event = JSON.parse(req.rawBody.toString());
 
     if (event.event === 'payment.captured') {
+
       const payment = event.payload.payment.entity;
       const appOrderId = payment.notes?.appOrderId;
 
       if (appOrderId) {
+
         const order = await Order.findOneAndUpdate(
           { orderId: appOrderId },
           {
@@ -215,21 +154,42 @@ app.post('/razorpay/webhook', async (req, res) => {
           { new: true }
         );
 
-        /* 🔥 SEND WHATSAPP AFTER PAYMENT */
-        if (order?.phone) {
-          try {
-            await axios.post(
-              "https://unerasable-penelope-nomadically.ngrok-free.dev/send-file",
-              {
-                phone: order.phone,
-                filePath: "test.pdf"
+        if (order) {
+
+          const canteenPhone = CANTEEN_NUMBERS[order.canteen];
+
+          if (canteenPhone) {
+
+            // Count paid orders for numbering
+            const orderCount = await Order.countDocuments({
+              canteen: order.canteen,
+              status: "PAID"
+            });
+
+            // Format items
+            let itemsText = "";
+            for (const [item, qty] of Object.entries(order.items)) {
+              if (qty > 0) {
+                itemsText += `${item} x${qty}\n`;
               }
-            );
+            }
 
-            console.log("✅ WhatsApp sent to", order.phone);
+            const message = `Order #${orderCount}\n\n${itemsText}`;
 
-          } catch (waErr) {
-            console.error("❌ WhatsApp failed:", waErr.message);
+            try {
+              await axios.post(
+                "https://unerasable-penelope-nomadically.ngrok-free.dev/send-file",
+                {
+                  phone: canteenPhone,
+                  text: message
+                }
+              );
+
+              console.log("✅ Order sent to canteen");
+
+            } catch (waErr) {
+              console.error("❌ WhatsApp failed:", waErr.message);
+            }
           }
         }
       }
