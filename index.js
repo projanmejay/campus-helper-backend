@@ -1,7 +1,6 @@
-
-
 const otpGenerator = require('otp-generator');
 const { Resend } = require('resend');
+const axios = require('axios');
 
 const Otp = require('./models/otp');
 const Order = require('./models/order');
@@ -41,7 +40,6 @@ mongoose
     process.exit(1);
   });
 
-
 /* ------------------ RAZORPAY ------------------ */
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
@@ -49,14 +47,6 @@ const razorpay = new Razorpay({
 });
 
 /* ------------------ RESEND ------------------ */
-if (!process.env.RESEND_API_KEY) {
-  console.error('❌ RESEND_API_KEY missing');
-}
-
-if (!process.env.EMAIL_FROM) {
-  console.error('❌ EMAIL_FROM missing');
-}
-
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 /* ------------------ UTIL ------------------ */
@@ -71,13 +61,9 @@ function generateCode(len = 6) {
 
 /* ------------------ SEND OTP ------------------ */
 app.post('/auth/send-otp', async (req, res) => {
-  console.log('🔥 /auth/send-otp HIT:', req.body);
-
   try {
     const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: 'Email required' });
-    }
+    if (!email) return res.status(400).json({ error: 'Email required' });
 
     const otp = otpGenerator.generate(6, {
       digits: true,
@@ -93,76 +79,54 @@ app.post('/auth/send-otp', async (req, res) => {
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
 
-    console.log('📧 Attempting to send OTP to:', email);
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM,
+      to: email,
+      subject: 'Your Campus Helper OTP',
+      html: `<h3>Your OTP</h3><h2>${otp}</h2><p>Valid for 5 minutes</p>`,
+    });
 
-    try {
-      const result = await resend.emails.send({
-        from: process.env.EMAIL_FROM,
-        to: email,
-        subject: 'Your Campus Helper OTP',
-        html: `
-          <h3>Welcome to Campus Helper</h3>
-          <p>Your OTP is:</p>
-          <h2>${otp}</h2>
-          <p>Valid for 5 minutes.</p>
-        `,
-      });
-
-      console.log('✅ Resend response:', result);
-
-      return res.json({ success: true, message: 'OTP sent to email' });
-    } catch (mailErr) {
-      console.error('❌ RESEND ERROR FULL:', mailErr);
-      return res.status(503).json({ error: 'Email service unavailable' });
-    }
+    res.json({ success: true });
 
   } catch (err) {
-    console.error('❌ AUTH ERROR:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ OTP ERROR:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
+
 /* ------------------ VERIFY OTP ------------------ */
 app.post('/auth/verify-otp', async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    if (!email || !otp) {
-      return res.status(400).json({ error: 'Email and OTP required' });
-    }
-
     const record = await Otp.findOne({ email });
-
-    if (!record) {
-      return res.status(400).json({ error: 'Invalid OTP' });
-    }
+    if (!record) return res.status(400).json({ error: 'Invalid OTP' });
 
     if (record.expiresAt < new Date()) {
       await Otp.deleteOne({ email });
       return res.status(400).json({ error: 'OTP expired' });
     }
 
-    if (record.otp !== otp) {
+    if (record.otp !== otp)
       return res.status(400).json({ error: 'Invalid OTP' });
-    }
 
-    // OTP is valid → delete it so it can’t be reused
     await Otp.deleteOne({ email });
 
-    return res.json({ success: true, message: 'OTP verified' });
+    res.json({ success: true });
 
   } catch (err) {
-    console.error('❌ VERIFY OTP ERROR:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ VERIFY ERROR:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
 /* ------------------ CREATE ORDER ------------------ */
 app.post('/order', async (req, res) => {
   try {
-    const { canteen, items, totalAmount } = req.body;
-    if (!canteen || totalAmount == null) {
-      return res.status(400).json({ error: 'canteen & totalAmount required' });
-    }
+    const { canteen, items, totalAmount, phone } = req.body;
+
+    if (!canteen || totalAmount == null || !phone)
+      return res.status(400).json({ error: 'canteen, totalAmount & phone required' });
 
     const orderId = uuidv4();
 
@@ -172,36 +136,18 @@ app.post('/order', async (req, res) => {
       canteen,
       items: items || {},
       totalAmount,
+      phone, // 🔥 store phone
       status: 'PENDING_PAYMENT',
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
 
     res.status(201).json(order);
+
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Server error' });
   }
 });
-/* ------------------ ORDER STATUS ------------------ */
-app.get('/order/:orderId/status', async (req, res) => {
-  try {
-    const { orderId } = req.params;
-
-    const order = await Order.findOne({ orderId });
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    return res.json({
-      status: order.status,
-      paidAt: order.paidAt || null,
-    });
-  } catch (e) {
-    console.error('❌ ORDER STATUS ERROR:', e);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 
 /* ------------------ CREATE RAZORPAY ORDER ------------------ */
 app.post('/razorpay/create-order', async (req, res) => {
@@ -222,6 +168,7 @@ app.post('/razorpay/create-order', async (req, res) => {
       provider: 'RAZORPAY',
       razorpayOrderId: rpOrder.id,
     };
+
     await order.save();
 
     res.json({
@@ -230,6 +177,7 @@ app.post('/razorpay/create-order', async (req, res) => {
       amount: rpOrder.amount,
       currency: rpOrder.currency,
     });
+
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: 'Razorpay error' });
@@ -242,39 +190,53 @@ app.post('/razorpay/webhook', async (req, res) => {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     const signature = req.headers['x-razorpay-signature'];
 
-    if (!req.rawBody) {
-      return res.status(400).send('Raw body missing');
-    }
-
     const expected = crypto
       .createHmac('sha256', secret)
       .update(req.rawBody)
       .digest('hex');
 
-    if (signature !== expected) {
+    if (signature !== expected)
       return res.status(400).send('Invalid signature');
-    }
 
     const event = JSON.parse(req.rawBody.toString());
 
     if (event.event === 'payment.captured') {
       const payment = event.payload.payment.entity;
-      const appOrderId = payment.receipt || payment.notes?.appOrderId;
+      const appOrderId = payment.notes?.appOrderId;
 
       if (appOrderId) {
-        await Order.findOneAndUpdate(
+        const order = await Order.findOneAndUpdate(
           { orderId: appOrderId },
           {
             status: 'PAID',
             paidAt: new Date(),
             'paymentInfo.razorpayPaymentId': payment.id,
-            'paymentInfo.razorpayOrderId': payment.order_id,
-          }
+          },
+          { new: true }
         );
+
+        /* 🔥 SEND WHATSAPP AFTER PAYMENT */
+        if (order?.phone) {
+          try {
+            await axios.post(
+              "https://unerasable-penelope-nomadically.ngrok-free.dev/send-file",
+              {
+                phone: order.phone,
+                filePath: "test.pdf"
+              }
+            );
+
+            console.log("✅ WhatsApp sent to", order.phone);
+
+          } catch (waErr) {
+            console.error("❌ WhatsApp failed:", waErr.message);
+          }
+        }
       }
     }
 
     res.json({ ok: true });
+
   } catch (e) {
     console.error('❌ Webhook error:', e);
     res.status(500).send('Webhook error');
