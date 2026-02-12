@@ -1,5 +1,3 @@
-
-
 const otpGenerator = require('otp-generator');
 const { Resend } = require('resend');
 
@@ -33,14 +31,12 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 
-mongoose
-  .connect(MONGO_URI)
+mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => {
     console.error('❌ MongoDB error', err);
     process.exit(1);
   });
-
 
 /* ------------------ RAZORPAY ------------------ */
 const razorpay = new Razorpay({
@@ -49,14 +45,6 @@ const razorpay = new Razorpay({
 });
 
 /* ------------------ RESEND ------------------ */
-if (!process.env.RESEND_API_KEY) {
-  console.error('❌ RESEND_API_KEY missing');
-}
-
-if (!process.env.EMAIL_FROM) {
-  console.error('❌ EMAIL_FROM missing');
-}
-
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 /* ------------------ UTIL ------------------ */
@@ -69,15 +57,11 @@ function generateCode(len = 6) {
   return s;
 }
 
-/* ------------------ SEND OTP ------------------ */
+/* ------------------ AUTH ROUTES ------------------ */
 app.post('/auth/send-otp', async (req, res) => {
-  console.log('🔥 /auth/send-otp HIT:', req.body);
-
   try {
     const { email } = req.body;
-    if (!email) {
-      return res.status(400).json({ error: 'Email required' });
-    }
+    if (!email) return res.status(400).json({ error: 'Email required' });
 
     const otp = otpGenerator.generate(6, {
       digits: true,
@@ -93,66 +77,39 @@ app.post('/auth/send-otp', async (req, res) => {
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
 
-    console.log('📧 Attempting to send OTP to:', email);
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM,
+      to: email,
+      subject: 'Your Campus Helper OTP',
+      html: `<h3>Your OTP: ${otp}</h3><p>Valid for 5 minutes.</p>`,
+    });
 
-    try {
-      const result = await resend.emails.send({
-        from: process.env.EMAIL_FROM,
-        to: email,
-        subject: 'Your Campus Helper OTP',
-        html: `
-          <h3>Welcome to Campus Helper</h3>
-          <p>Your OTP is:</p>
-          <h2>${otp}</h2>
-          <p>Valid for 5 minutes.</p>
-        `,
-      });
-
-      console.log('✅ Resend response:', result);
-
-      return res.json({ success: true, message: 'OTP sent to email' });
-    } catch (mailErr) {
-      console.error('❌ RESEND ERROR FULL:', mailErr);
-      return res.status(503).json({ error: 'Email service unavailable' });
-    }
-
+    res.json({ success: true });
   } catch (err) {
     console.error('❌ AUTH ERROR:', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
-/* ------------------ VERIFY OTP ------------------ */
+
 app.post('/auth/verify-otp', async (req, res) => {
   try {
     const { email, otp } = req.body;
-
-    if (!email || !otp) {
-      return res.status(400).json({ error: 'Email and OTP required' });
-    }
+    if (!email || !otp) return res.status(400).json({ error: 'Missing data' });
 
     const record = await Otp.findOne({ email });
-
-    if (!record) {
-      return res.status(400).json({ error: 'Invalid OTP' });
-    }
-
+    if (!record) return res.status(400).json({ error: 'Invalid OTP' });
     if (record.expiresAt < new Date()) {
       await Otp.deleteOne({ email });
       return res.status(400).json({ error: 'OTP expired' });
     }
+    if (record.otp !== otp) return res.status(400).json({ error: 'Invalid OTP' });
 
-    if (record.otp !== otp) {
-      return res.status(400).json({ error: 'Invalid OTP' });
-    }
-
-    // OTP is valid → delete it so it can’t be reused
     await Otp.deleteOne({ email });
-
-    return res.json({ success: true, message: 'OTP verified' });
+    res.json({ success: true });
 
   } catch (err) {
     console.error('❌ VERIFY OTP ERROR:', err);
-    return res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -160,8 +117,25 @@ app.post('/auth/verify-otp', async (req, res) => {
 app.post('/order', async (req, res) => {
   try {
     const { canteen, items, totalAmount } = req.body;
-    if (!canteen || totalAmount == null) {
-      return res.status(400).json({ error: 'canteen & totalAmount required' });
+
+    if (!canteen || !Array.isArray(items) || totalAmount == null) {
+      return res.status(400).json({
+        error: 'canteen, items (array), totalAmount required'
+      });
+    }
+
+    // Validate items
+    for (const item of items) {
+      if (
+        !item.id ||
+        !item.name ||
+        typeof item.qty !== 'number' ||
+        typeof item.price !== 'number'
+      ) {
+        return res.status(400).json({
+          error: 'Each item must have id, name, qty, price'
+        });
+      }
     }
 
     const orderId = uuidv4();
@@ -170,38 +144,36 @@ app.post('/order', async (req, res) => {
       orderId,
       code: generateCode(),
       canteen,
-      items: items || {},
+      items, // stored fully structured
       totalAmount,
       status: 'PENDING_PAYMENT',
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
 
     res.status(201).json(order);
-  } catch (e) {
-    console.error(e);
+
+  } catch (err) {
+    console.error('❌ CREATE ORDER ERROR:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 /* ------------------ ORDER STATUS ------------------ */
 app.get('/order/:orderId/status', async (req, res) => {
   try {
-    const { orderId } = req.params;
+    const order = await Order.findOne({ orderId: req.params.orderId });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    const order = await Order.findOne({ orderId });
-    if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
-    }
-
-    return res.json({
+    res.json({
       status: order.status,
       paidAt: order.paidAt || null,
     });
-  } catch (e) {
-    console.error('❌ ORDER STATUS ERROR:', e);
+
+  } catch (err) {
+    console.error('❌ STATUS ERROR:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
-
 
 /* ------------------ CREATE RAZORPAY ORDER ------------------ */
 app.post('/razorpay/create-order', async (req, res) => {
@@ -222,6 +194,7 @@ app.post('/razorpay/create-order', async (req, res) => {
       provider: 'RAZORPAY',
       razorpayOrderId: rpOrder.id,
     };
+
     await order.save();
 
     res.json({
@@ -230,8 +203,9 @@ app.post('/razorpay/create-order', async (req, res) => {
       amount: rpOrder.amount,
       currency: rpOrder.currency,
     });
-  } catch (e) {
-    console.error(e);
+
+  } catch (err) {
+    console.error('❌ RAZORPAY ERROR:', err);
     res.status(500).json({ error: 'Razorpay error' });
   }
 });
@@ -242,24 +216,20 @@ app.post('/razorpay/webhook', async (req, res) => {
     const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
     const signature = req.headers['x-razorpay-signature'];
 
-    if (!req.rawBody) {
-      return res.status(400).send('Raw body missing');
-    }
+    if (!req.rawBody) return res.status(400).send('Raw body missing');
 
     const expected = crypto
       .createHmac('sha256', secret)
       .update(req.rawBody)
       .digest('hex');
 
-    if (signature !== expected) {
-      return res.status(400).send('Invalid signature');
-    }
+    if (signature !== expected) return res.status(400).send('Invalid signature');
 
     const event = JSON.parse(req.rawBody.toString());
 
     if (event.event === 'payment.captured') {
       const payment = event.payload.payment.entity;
-      const appOrderId = payment.receipt || payment.notes?.appOrderId;
+      const appOrderId = payment.notes?.appOrderId;
 
       if (appOrderId) {
         await Order.findOneAndUpdate(
@@ -275,16 +245,15 @@ app.post('/razorpay/webhook', async (req, res) => {
     }
 
     res.json({ ok: true });
-  } catch (e) {
-    console.error('❌ Webhook error:', e);
+
+  } catch (err) {
+    console.error('❌ Webhook error:', err);
     res.status(500).send('Webhook error');
   }
 });
 
 /* ------------------ HEALTH ------------------ */
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
+app.get('/health', (req, res) => res.send('OK'));
 
 /* ------------------ START ------------------ */
 const PORT = process.env.PORT || 3000;
