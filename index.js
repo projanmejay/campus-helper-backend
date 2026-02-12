@@ -1,3 +1,6 @@
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
+const qrcode = require('qrcode-terminal');
+
 const otpGenerator = require('otp-generator');
 const { Resend } = require('resend');
 
@@ -38,6 +41,28 @@ mongoose
     console.error('❌ MongoDB error', err);
     process.exit(1);
   });
+
+/* ------------------ WHATSAPP SETUP ------------------ */
+
+const waClient = new Client({
+  authStrategy: new LocalAuth()
+});
+
+waClient.on('qr', qr => {
+  console.log('📱 Scan this QR code with WhatsApp:');
+  qrcode.generate(qr, { small: true });
+});
+
+waClient.on('ready', () => {
+  console.log('✅ WhatsApp is ready!');
+});
+
+waClient.on('auth_failure', msg => {
+  console.error('❌ WhatsApp Auth Failure:', msg);
+});
+
+waClient.initialize();
+
 
 /* ------------------ RAZORPAY ------------------ */
 const razorpay = new Razorpay({
