@@ -1,4 +1,4 @@
-
+const discussionRoutes = require("./routes/discussionRoutes");
 
 const otpGenerator = require('otp-generator');
 const { Resend } = require('resend');
@@ -40,6 +40,11 @@ mongoose
     console.error('❌ MongoDB error', err);
     process.exit(1);
   });
+
+
+/* ------------------ DISCUSSION ROUTES ------------------ */
+/* THIS LINE ACTIVATES THE DISCUSS FEATURE */
+app.use("/discussion", discussionRoutes);
 
 
 /* ------------------ RAZORPAY ------------------ */
@@ -121,6 +126,8 @@ app.post('/auth/send-otp', async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+
 /* ------------------ VERIFY OTP ------------------ */
 app.post('/auth/verify-otp', async (req, res) => {
   try {
@@ -145,7 +152,6 @@ app.post('/auth/verify-otp', async (req, res) => {
       return res.status(400).json({ error: 'Invalid OTP' });
     }
 
-    // OTP is valid → delete it so it can’t be reused
     await Otp.deleteOne({ email });
 
     return res.json({ success: true, message: 'OTP verified' });
@@ -155,6 +161,7 @@ app.post('/auth/verify-otp', async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
+
 
 /* ------------------ CREATE ORDER ------------------ */
 app.post('/order', async (req, res) => {
@@ -182,6 +189,8 @@ app.post('/order', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+
 /* ------------------ ORDER STATUS ------------------ */
 app.get('/order/:orderId/status', async (req, res) => {
   try {
@@ -236,6 +245,7 @@ app.post('/razorpay/create-order', async (req, res) => {
   }
 });
 
+
 /* ------------------ RAZORPAY WEBHOOK ------------------ */
 app.post('/razorpay/webhook', async (req, res) => {
   try {
@@ -281,10 +291,15 @@ app.post('/razorpay/webhook', async (req, res) => {
   }
 });
 
+
 /* ------------------ HEALTH ------------------ */
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
+
 /* ------------------ START ------------------ */
 const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
