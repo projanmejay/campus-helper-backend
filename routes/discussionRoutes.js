@@ -74,11 +74,14 @@ router.get("/all", async (req, res) => {
 });
 
 
-/* ================= UPVOTE ================= */
+/* ================= VOTE POST ================= */
 
-router.post("/upvote/:id", async (req, res) => {
+router.post("/vote/:id", async (req, res) => {
 
   try {
+
+    const { email, vote } = req.body; 
+    // vote = 1 (upvote) OR -1 (downvote)
 
     const post = await Discussion.findById(req.params.id);
 
@@ -89,49 +92,41 @@ router.post("/upvote/:id", async (req, res) => {
       });
     }
 
-    post.upvotes += 1;
+    const existingVote = post.votes.find(v => v.email === email);
 
-    await post.save();
+    if (existingVote) {
 
-    res.json({
-      success: true,
-      score: post.upvotes - post.downvotes
-    });
+      if (existingVote.vote === vote) {
 
-  } catch (error) {
+        return res.json({
+          success: true,
+          message: "Already voted",
+          upvotes: post.upvotes,
+          downvotes: post.downvotes
+        });
 
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+      }
 
-  }
+      if (existingVote.vote === 1) post.upvotes -= 1;
+      if (existingVote.vote === -1) post.downvotes -= 1;
 
-});
+      existingVote.vote = vote;
 
+    } else {
 
-/* ================= DOWNVOTE ================= */
+      post.votes.push({ email, vote });
 
-router.post("/downvote/:id", async (req, res) => {
-
-  try {
-
-    const post = await Discussion.findById(req.params.id);
-
-    if (!post) {
-      return res.status(404).json({
-        success: false,
-        message: "Post not found"
-      });
     }
 
-    post.downvotes += 1;
+    if (vote === 1) post.upvotes += 1;
+    if (vote === -1) post.downvotes += 1;
 
     await post.save();
 
     res.json({
       success: true,
-      score: post.upvotes - post.downvotes
+      upvotes: post.upvotes,
+      downvotes: post.downvotes
     });
 
   } catch (error) {
@@ -154,30 +149,16 @@ router.post("/comment", async (req, res) => {
 
     const { postId, email, comment } = req.body;
 
-    if (!postId || !email || !comment) {
-      return res.status(400).json({
-        success: false,
-        message: "postId, email and comment required"
-      });
-    }
-
     const user = await User.findOne({ email });
 
     if (!user || !user.username) {
       return res.status(400).json({
         success: false,
-        message: "You must create a username before commenting"
+        message: "Create username first"
       });
     }
 
     const post = await Discussion.findById(postId);
-
-    if (!post) {
-      return res.status(404).json({
-        success: false,
-        message: "Post not found"
-      });
-    }
 
     post.comments.push({
       user: user.username,
@@ -188,7 +169,6 @@ router.post("/comment", async (req, res) => {
 
     res.json({
       success: true,
-      message: "Comment added",
       post
     });
 
@@ -202,5 +182,159 @@ router.post("/comment", async (req, res) => {
   }
 
 });
+
+
+/* ================= COMMENT VOTE ================= */
+
+router.post("/comment/vote", async (req, res) => {
+
+  try {
+
+    const { postId, commentId, email, vote } = req.body;
+
+    const post = await Discussion.findById(postId);
+
+    const comment = post.comments.id(commentId);
+
+    const existingVote = comment.votes.find(v => v.email === email);
+
+    if (existingVote) {
+
+      if (existingVote.vote === vote) {
+        return res.json({ success: true });
+      }
+
+      if (existingVote.vote === 1) comment.upvotes -= 1;
+      if (existingVote.vote === -1) comment.downvotes -= 1;
+
+      existingVote.vote = vote;
+
+    } else {
+
+      comment.votes.push({ email, vote });
+
+    }
+
+    if (vote === 1) comment.upvotes += 1;
+    if (vote === -1) comment.downvotes += 1;
+
+    await post.save();
+
+    res.json({
+      success: true,
+      comment
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+
+  }
+
+});
+
+
+/* ================= REPLY TO COMMENT ================= */
+
+router.post("/reply", async (req, res) => {
+
+  try {
+
+    const { postId, commentId, email, comment } = req.body;
+
+    const user = await User.findOne({ email });
+
+    if (!user || !user.username) {
+      return res.status(400).json({
+        success: false,
+        message: "Create username first"
+      });
+    }
+
+    const post = await Discussion.findById(postId);
+
+    const parentComment = post.comments.id(commentId);
+
+    parentComment.replies.push({
+      user: user.username,
+      comment
+    });
+
+    await post.save();
+
+    res.json({
+      success: true,
+      post
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+
+  }
+
+});
+
+
+/* ================= REPLY VOTE ================= */
+
+router.post("/reply/vote", async (req, res) => {
+
+  try {
+
+    const { postId, commentId, replyId, email, vote } = req.body;
+
+    const post = await Discussion.findById(postId);
+
+    const comment = post.comments.id(commentId);
+
+    const reply = comment.replies.id(replyId);
+
+    const existingVote = reply.votes.find(v => v.email === email);
+
+    if (existingVote) {
+
+      if (existingVote.vote === vote) {
+        return res.json({ success: true });
+      }
+
+      if (existingVote.vote === 1) reply.upvotes -= 1;
+      if (existingVote.vote === -1) reply.downvotes -= 1;
+
+      existingVote.vote = vote;
+
+    } else {
+
+      reply.votes.push({ email, vote });
+
+    }
+
+    if (vote === 1) reply.upvotes += 1;
+    if (vote === -1) reply.downvotes += 1;
+
+    await post.save();
+
+    res.json({
+      success: true,
+      reply
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+
+  }
+
+});
+
 
 module.exports = router;

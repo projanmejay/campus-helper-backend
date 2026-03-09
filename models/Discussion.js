@@ -1,26 +1,8 @@
 const mongoose = require("mongoose");
 
-const discussionSchema = new mongoose.Schema({
-
-  title: {
-    type: String,
-    required: true
-  },
-
-  description: {
-    type: String,
-    required: true
-  },
-
-  author: {
-    type: String,
-    required: true
-  },
-
-  category: {
-    type: String,
-    default: "General"
-  },
+const replySchema = new mongoose.Schema({
+  user: String,
+  comment: String,
 
   upvotes: {
     type: Number,
@@ -32,17 +14,90 @@ const discussionSchema = new mongoose.Schema({
     default: 0
   },
 
-  comments: [
+  votes: [
     {
-      user: String,
-      comment: String,
-      createdAt: {
-        type: Date,
-        default: Date.now
-      }
+      email: String,
+      vote: Number // 1 = upvote, -1 = downvote
     }
-  ]
+  ],
 
-}, { timestamps: true });
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+const commentSchema = new mongoose.Schema({
+  user: String,
+  comment: String,
+
+  upvotes: {
+    type: Number,
+    default: 0
+  },
+
+  downvotes: {
+    type: Number,
+    default: 0
+  },
+
+  votes: [
+    {
+      email: String,
+      vote: Number // 1 = upvote, -1 = downvote
+    }
+  ],
+
+  replies: [replySchema],
+
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+
+const discussionSchema = new mongoose.Schema(
+  {
+    title: {
+      type: String,
+      required: true
+    },
+
+    description: {
+      type: String,
+      required: true
+    },
+
+    author: {
+      type: String,
+      required: true
+    },
+
+    category: {
+      type: String,
+      default: "General"
+    },
+
+    upvotes: {
+      type: Number,
+      default: 0
+    },
+
+    downvotes: {
+      type: Number,
+      default: 0
+    },
+
+    votes: [
+      {
+        email: String,
+        vote: Number // 1 = upvote, -1 = downvote
+      }
+    ],
+
+    comments: [commentSchema]
+  },
+  { timestamps: true }
+);
 
 module.exports = mongoose.model("Discussion", discussionSchema);
