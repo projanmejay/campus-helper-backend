@@ -1,18 +1,30 @@
 const express = require("express");
 const router = express.Router();
 const Discussion = require("../models/Discussion");
+const User = require("../models/User");
 
 
-// CREATE DISCUSSION POST
+/* ================= CREATE DISCUSSION POST ================= */
+
 router.post("/create", async (req, res) => {
+
   try {
 
-    const { title, description, author, category } = req.body;
+    const { title, description, email, category } = req.body;
+
+    const user = await User.findOne({ email });
+
+    if (!user || !user.username) {
+      return res.status(400).json({
+        success: false,
+        message: "You must create a username before posting"
+      });
+    }
 
     const post = new Discussion({
       title,
       description,
-      author,
+      author: user.username,
       category
     });
 
@@ -32,10 +44,12 @@ router.post("/create", async (req, res) => {
     });
 
   }
+
 });
 
 
-// GET ALL POSTS
+/* ================= GET ALL POSTS ================= */
+
 router.get("/all", async (req, res) => {
 
   try {
@@ -58,17 +72,29 @@ router.get("/all", async (req, res) => {
   }
 
 });
-// ADD COMMENT TO A POST
+
+
+/* ================= ADD COMMENT ================= */
+
 router.post("/comment", async (req, res) => {
 
   try {
 
-    const { postId, user, comment } = req.body;
+    const { postId, email, comment } = req.body;
 
-    if (!postId || !user || !comment) {
+    if (!postId || !email || !comment) {
       return res.status(400).json({
         success: false,
-        message: "postId, user and comment required"
+        message: "postId, email and comment required"
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user || !user.username) {
+      return res.status(400).json({
+        success: false,
+        message: "You must create a username before commenting"
       });
     }
 
@@ -82,7 +108,7 @@ router.post("/comment", async (req, res) => {
     }
 
     post.comments.push({
-      user,
+      user: user.username,
       comment
     });
 
@@ -104,4 +130,5 @@ router.post("/comment", async (req, res) => {
   }
 
 });
+
 module.exports = router;

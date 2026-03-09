@@ -19,6 +19,7 @@ const { v4: uuidv4 } = require("uuid");
 const app = express();
 
 /* ------------------ MIDDLEWARE ------------------ */
+
 app.use(cors());
 
 app.use(
@@ -51,6 +52,91 @@ mongoose
 /* ------------------ DISCUSSION ROUTES ------------------ */
 
 app.use("/discussion", discussionRoutes);
+
+/* ===================================================== */
+/* ================= USERNAME SYSTEM =================== */
+/* ===================================================== */
+
+/* -------- CHECK USERNAME -------- */
+
+app.get("/user/check-username", async (req, res) => {
+  try {
+    const { email } = req.query;
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (user.username) {
+      return res.json({
+        hasUsername: true,
+        username: user.username,
+      });
+    }
+
+    return res.json({
+      hasUsername: false,
+    });
+  } catch (err) {
+    console.error("CHECK USERNAME ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* -------- CREATE USERNAME -------- */
+
+app.post("/user/create-username", async (req, res) => {
+  try {
+    const { email, username } = req.body;
+
+    if (!username || username.trim().length < 3) {
+      return res.status(400).json({
+        error: "Username must be at least 3 characters",
+      });
+    }
+
+    const existingUsername = await User.findOne({ username });
+
+    if (existingUsername) {
+      return res.status(400).json({
+        error: "Username already taken",
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    if (user.usernameConfirmed) {
+      return res.status(400).json({
+        error: "Username already confirmed and cannot be changed",
+      });
+    }
+
+    user.username = username;
+    user.usernameConfirmed = true;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Username created successfully",
+      username: user.username,
+    });
+  } catch (err) {
+    console.error("CREATE USERNAME ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 /* ------------------ RAZORPAY ------------------ */
 
@@ -85,8 +171,6 @@ function generateCode(len = 6) {
 /* ========================================================= */
 /* ====================== AUTH SYSTEM ====================== */
 /* ========================================================= */
-
-/* ------------------ REGISTER (SEND OTP) ------------------ */
 
 app.post("/auth/register", async (req, res) => {
   try {
@@ -213,148 +297,12 @@ app.post("/auth/login", async (req, res) => {
         name: user.name,
         hall: user.hall,
         email: user.email,
+        username: user.username || null,
       },
     });
   } catch (err) {
     console.error("LOGIN ERROR:", err);
     res.status(500).json({ error: "Server error" });
-  }
-});
-
-/* ========================================================= */
-/* ===================== ORDER SYSTEM ====================== */
-/* ========================================================= */
-
-app.post("/order", async (req, res) => {
-  try {
-    const { canteen, items, totalAmount } = req.body;
-
-    if (!canteen || totalAmount == null) {
-      return res.status(400).json({ error: "canteen & totalAmount required" });
-    }
-
-    const orderId = uuidv4();
-
-    const order = await Order.create({
-      orderId,
-      code: generateCode(),
-      canteen,
-      items: items || {},
-      totalAmount,
-      status: "PENDING_PAYMENT",
-      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
-    });
-
-    res.status(201).json(order);
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-/* ------------------ ORDER STATUS ------------------ */
-
-app.get("/order/:orderId/status", async (req, res) => {
-  try {
-    const { orderId } = req.params;
-
-    const order = await Order.findOne({ orderId });
-
-    if (!order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    return res.json({
-      status: order.status,
-      paidAt: order.paidAt || null,
-    });
-  } catch (e) {
-    console.error("ORDER STATUS ERROR:", e);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-/* ------------------ CREATE RAZORPAY ORDER ------------------ */
-
-app.post("/razorpay/create-order", async (req, res) => {
-  try {
-    const { orderId } = req.body;
-
-    const order = await Order.findOne({ orderId });
-
-    if (!order) return res.status(404).json({ error: "Order not found" });
-
-    const rpOrder = await razorpay.orders.create({
-      amount: order.totalAmount * 100,
-      currency: "INR",
-      receipt: order.orderId.substring(0, 40),
-      notes: { appOrderId: order.orderId },
-      payment_capture: 1,
-    });
-
-    order.paymentInfo = {
-      provider: "RAZORPAY",
-      razorpayOrderId: rpOrder.id,
-    };
-
-    await order.save();
-
-    res.json({
-      key: process.env.RAZORPAY_KEY_ID,
-      razorpayOrderId: rpOrder.id,
-      amount: rpOrder.amount,
-      currency: rpOrder.currency,
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: "Razorpay error" });
-  }
-});
-
-/* ------------------ RAZORPAY WEBHOOK ------------------ */
-
-app.post("/razorpay/webhook", async (req, res) => {
-  try {
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    const signature = req.headers["x-razorpay-signature"];
-
-    if (!req.rawBody) {
-      return res.status(400).send("Raw body missing");
-    }
-
-    const expected = crypto
-      .createHmac("sha256", secret)
-      .update(req.rawBody)
-      .digest("hex");
-
-    if (signature !== expected) {
-      return res.status(400).send("Invalid signature");
-    }
-
-    const event = JSON.parse(req.rawBody.toString());
-
-    if (event.event === "payment.captured") {
-      const payment = event.payload.payment.entity;
-
-      const appOrderId = payment.receipt || payment.notes?.appOrderId;
-
-      if (appOrderId) {
-        await Order.findOneAndUpdate(
-          { orderId: appOrderId },
-          {
-            status: "PAID",
-            paidAt: new Date(),
-            "paymentInfo.razorpayPaymentId": payment.id,
-            "paymentInfo.razorpayOrderId": payment.order_id,
-          }
-        );
-      }
-    }
-
-    res.json({ ok: true });
-  } catch (e) {
-    console.error("Webhook error:", e);
-    res.status(500).send("Webhook error");
   }
 });
 

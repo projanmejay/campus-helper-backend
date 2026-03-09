@@ -5,23 +5,41 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+
   hall: {
     type: String,
     required: true
   },
+
   email: {
     type: String,
     required: true,
     unique: true
   },
+
   password: {
     type: String,
     required: true
   },
+
   verified: {
     type: Boolean,
     default: false
+  },
+
+  // discussion username
+  username: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+
+  // ensures username can only be set once
+  usernameConfirmed: {
+    type: Boolean,
+    default: false
   }
+
 });
 
 module.exports = mongoose.model("User", userSchema);
