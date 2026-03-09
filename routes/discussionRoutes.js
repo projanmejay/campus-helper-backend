@@ -74,6 +74,78 @@ router.get("/all", async (req, res) => {
 });
 
 
+/* ================= UPVOTE ================= */
+
+router.post("/upvote/:id", async (req, res) => {
+
+  try {
+
+    const post = await Discussion.findById(req.params.id);
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found"
+      });
+    }
+
+    post.upvotes += 1;
+
+    await post.save();
+
+    res.json({
+      success: true,
+      score: post.upvotes - post.downvotes
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+
+  }
+
+});
+
+
+/* ================= DOWNVOTE ================= */
+
+router.post("/downvote/:id", async (req, res) => {
+
+  try {
+
+    const post = await Discussion.findById(req.params.id);
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: "Post not found"
+      });
+    }
+
+    post.downvotes += 1;
+
+    await post.save();
+
+    res.json({
+      success: true,
+      score: post.upvotes - post.downvotes
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+
+  }
+
+});
+
+
 /* ================= ADD COMMENT ================= */
 
 router.post("/comment", async (req, res) => {

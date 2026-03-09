@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 
 const discussionSchema = new mongoose.Schema({
+
   title: {
     type: String,
     required: true
@@ -22,6 +23,11 @@ const discussionSchema = new mongoose.Schema({
   },
 
   upvotes: {
+    type: Number,
+    default: 0
+  },
+
+  downvotes: {
     type: Number,
     default: 0
   },
