@@ -57,8 +57,6 @@ app.use("/discussion", discussionRoutes);
 /* ================= USERNAME SYSTEM =================== */
 /* ===================================================== */
 
-/* -------- CHECK USERNAME -------- */
-
 app.get("/user/check-username", async (req, res) => {
   try {
     const { email } = req.query;
@@ -82,16 +80,17 @@ app.get("/user/check-username", async (req, res) => {
     return res.json({
       hasUsername: false,
     });
+
   } catch (err) {
     console.error("CHECK USERNAME ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-/* -------- CREATE USERNAME -------- */
 
 app.post("/user/create-username", async (req, res) => {
   try {
+
     const { email, username } = req.body;
 
     if (!username || username.trim().length < 3) {
@@ -132,9 +131,12 @@ app.post("/user/create-username", async (req, res) => {
       message: "Username created successfully",
       username: user.username,
     });
+
   } catch (err) {
+
     console.error("CREATE USERNAME ERROR:", err);
     res.status(500).json({ error: "Server error" });
+
   }
 });
 
@@ -174,6 +176,7 @@ function generateCode(len = 6) {
 
 app.post("/auth/register", async (req, res) => {
   try {
+
     const { name, hall, email, password } = req.body;
 
     if (!name || !hall || !email || !password) {
@@ -219,16 +222,19 @@ app.post("/auth/register", async (req, res) => {
     });
 
     res.json({ success: true, message: "OTP sent to email" });
+
   } catch (err) {
+
     console.error("REGISTER ERROR:", err);
     res.status(500).json({ error: "Server error" });
+
   }
 });
 
-/* ------------------ VERIFY OTP ------------------ */
 
 app.post("/auth/verify-otp", async (req, res) => {
   try {
+
     const { email, otp } = req.body;
 
     const record = await Otp.findOne({ email });
@@ -265,16 +271,19 @@ app.post("/auth/verify-otp", async (req, res) => {
         email: newUser.email,
       },
     });
+
   } catch (err) {
+
     console.error("VERIFY OTP ERROR:", err);
     res.status(500).json({ error: "Server error" });
+
   }
 });
 
-/* ------------------ LOGIN ------------------ */
 
 app.post("/auth/login", async (req, res) => {
   try {
+
     const { email, password } = req.body;
 
     const user = await User.findOne({ email });
@@ -300,11 +309,15 @@ app.post("/auth/login", async (req, res) => {
         username: user.username || null,
       },
     });
+
   } catch (err) {
+
     console.error("LOGIN ERROR:", err);
     res.status(500).json({ error: "Server error" });
+
   }
 });
+
 
 /* ------------------ HEALTH ------------------ */
 
@@ -312,10 +325,10 @@ app.get("/health", (req, res) => {
   res.status(200).send("OK");
 });
 
-/* ------------------ START ------------------ */
+/* ------------------ START SERVER ------------------ */
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
-app.listen(PORT, "0.0.0.0", () => {
+app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });
