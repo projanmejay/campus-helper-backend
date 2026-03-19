@@ -318,6 +318,233 @@ app.post("/auth/login", async (req, res) => {
   }
 });
 
+/* ========================================================= */
+/* ===================== PAYMENT SYSTEM ==================== */
+/* ========================================================= */
+
+/* --- Create Razorpay Order --- */
+
+app.post("/razorpay/create-order", async (req, res) => {
+  try {
+
+    const { amount, currency = "INR", userId, items, deliveryAddress } = req.body;
+
+    if (!amount || !userId) {
+      return res.status(400).json({ error: "amount and userId are required" });
+    }
+
+    const receiptId = uuidv4();
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount: Math.round(amount * 100), // paise
+      currency,
+      receipt: receiptId,
+      notes: { userId },
+    });
+
+    // Save pending order to DB
+    const order = await Order.create({
+      orderId: razorpayOrder.id,
+      receipt: receiptId,
+      userId,
+      items: items || [],
+      deliveryAddress: deliveryAddress || "",
+      amount,
+      currency,
+      status: "pending",
+    });
+
+    res.json({
+      success: true,
+      orderId: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      key: process.env.RAZORPAY_KEY_ID,
+      dbOrderId: order._id,
+    });
+
+  } catch (err) {
+
+    console.error("CREATE ORDER ERROR:", err);
+    res.status(500).json({ error: "Failed to create order" });
+
+  }
+});
+
+/* --- Verify Payment (client-side callback) --- */
+
+app.post("/razorpay/verify-payment", async (req, res) => {
+  try {
+
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+    } = req.body;
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({ error: "Missing payment fields" });
+    }
+
+    // Verify signature
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ error: "Payment verification failed" });
+    }
+
+    // Update order in DB
+    const order = await Order.findOneAndUpdate(
+      { orderId: razorpay_order_id },
+      {
+        paymentId: razorpay_payment_id,
+        signature: razorpay_signature,
+        status: "paid",
+        paidAt: new Date(),
+      },
+      { new: true }
+    );
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    // Send confirmation email
+    try {
+      const user = await User.findById(order.userId);
+      if (user) {
+        await resend.emails.send({
+          from: process.env.EMAIL_FROM,
+          to: user.email,
+          subject: "Payment Confirmed – Campus Helper",
+          html: `
+            <h3>Payment Successful 🎉</h3>
+            <p>Hi ${user.name},</p>
+            <p>Your payment of ₹${order.amount} has been received.</p>
+            <p><strong>Order ID:</strong> ${order.orderId}</p>
+            <p><strong>Payment ID:</strong> ${order.paymentId}</p>
+            <p>Thank you for using Campus Helper!</p>
+          `,
+        });
+      }
+    } catch (emailErr) {
+      console.error("EMAIL SEND ERROR:", emailErr);
+      // Don't fail the request if email fails
+    }
+
+    res.json({
+      success: true,
+      message: "Payment verified",
+      order,
+    });
+
+  } catch (err) {
+
+    console.error("VERIFY PAYMENT ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+
+  }
+});
+
+/* --- Razorpay Webhook (server-side event confirmation) --- */
+
+app.post("/razorpay/webhook", async (req, res) => {
+  try {
+
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      console.error("❌ RAZORPAY_WEBHOOK_SECRET missing");
+      return res.status(500).json({ error: "Webhook secret not configured" });
+    }
+
+    const signature = req.headers["x-razorpay-signature"];
+
+    const expectedSignature = crypto
+      .createHmac("sha256", webhookSecret)
+      .update(req.rawBody)
+      .digest("hex");
+
+    if (expectedSignature !== signature) {
+      return res.status(400).json({ error: "Invalid webhook signature" });
+    }
+
+    const event = req.body;
+
+    if (event.event === "payment.captured") {
+      const payment = event.payload.payment.entity;
+
+      await Order.findOneAndUpdate(
+        { orderId: payment.order_id },
+        {
+          paymentId: payment.id,
+          status: "paid",
+          paidAt: new Date(),
+        }
+      );
+    }
+
+    if (event.event === "payment.failed") {
+      const payment = event.payload.payment.entity;
+
+      await Order.findOneAndUpdate(
+        { orderId: payment.order_id },
+        { status: "failed" }
+      );
+    }
+
+    res.json({ success: true });
+
+  } catch (err) {
+
+    console.error("WEBHOOK ERROR:", err);
+    res.status(500).json({ error: "Webhook processing failed" });
+
+  }
+});
+
+/* --- Get Order by ID --- */
+
+app.get("/razorpay/order/:orderId", async (req, res) => {
+  try {
+
+    const order = await Order.findOne({ orderId: req.params.orderId });
+
+    if (!order) {
+      return res.status(404).json({ error: "Order not found" });
+    }
+
+    res.json({ success: true, order });
+
+  } catch (err) {
+
+    console.error("GET ORDER ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+
+  }
+});
+
+/* --- Get All Orders for a User --- */
+
+app.get("/razorpay/orders/user/:userId", async (req, res) => {
+  try {
+
+    const orders = await Order.find({ userId: req.params.userId }).sort({
+      createdAt: -1,
+    });
+
+    res.json({ success: true, orders });
+
+  } catch (err) {
+
+    console.error("GET USER ORDERS ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+
+  }
+});
 
 /* ------------------ HEALTH ------------------ */
 
