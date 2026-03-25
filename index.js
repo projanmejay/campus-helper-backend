@@ -1,6 +1,5 @@
 require("dotenv").config();
 
-<<<<<<< HEAD
 const express    = require("express");
 const cors       = require("cors");
 const mongoose   = require("mongoose");
@@ -15,31 +14,14 @@ const { Resend }    = require("resend");
 const discussionRoutes = require("./routes/discussionRoutes");
 const User  = require("./models/User");
 const Otp   = require("./models/otp");
-=======
-const express = require("express");
-const cors = require("cors");
-const mongoose = require("mongoose");
-const bcrypt = require("bcrypt");
-const crypto = require("crypto");
-const { v4: uuidv4 } = require("uuid");
-
-const Razorpay = require("razorpay");
-const otpGenerator = require("otp-generator");
-const { Resend } = require("resend");
-
-const discussionRoutes = require("./routes/discussionRoutes");
-const User = require("./models/User");
-const Otp = require("./models/otp");
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
 const Order = require("./models/order");
 
 const app = express();
 
 /* ------------------ MIDDLEWARE ------------------ */
-app.use(cors());
-app.use(express.json());
 
-<<<<<<< HEAD
+app.use(cors());
+
 // Keep raw body available for Razorpay webhook signature verification
 app.use(
   express.json({
@@ -64,9 +46,6 @@ if (!process.env.RAZORPAY_KEY_SECRET)   console.error("❌ RAZORPAY_KEY_SECRET m
 
 /* ------------------ DB ------------------ */
 
-=======
-/* ------------------ DB ------------------ */
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB connected"))
   .catch(err => {
@@ -75,7 +54,6 @@ mongoose.connect(process.env.MONGO_URI)
   });
 
 /* ------------------ ROUTES ------------------ */
-<<<<<<< HEAD
 
 app.use("/discussion", discussionRoutes);
 
@@ -83,41 +61,24 @@ app.use("/discussion", discussionRoutes);
 
 const razorpay = new Razorpay({
   key_id:     process.env.RAZORPAY_KEY_ID,
-=======
-app.use("/discussion", discussionRoutes);
-
-/* ------------------ SERVICES ------------------ */
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 /* ===================================================== */
-<<<<<<< HEAD
 /* ================= USERNAME ========================== */
-=======
-/* ================= USERNAME =========================== */
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
 /* ===================================================== */
 
 app.get("/user/check-username", async (req, res) => {
   try {
     const { email } = req.query;
-<<<<<<< HEAD
 
     if (!email) return res.status(400).json({ error: "email is required" });
 
     const user = await User.findOne({ email });
 
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
-=======
-    const user = await User.findOne({ email });
-
-    if (!user) return res.status(404).json({ success: false });
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
 
     if (user.username) {
       return res.json({ hasUsername: true, username: user.username });
@@ -126,10 +87,7 @@ app.get("/user/check-username", async (req, res) => {
     res.json({ hasUsername: false });
 
   } catch (err) {
-<<<<<<< HEAD
     console.error("CHECK USERNAME ERROR:", err);
-=======
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -138,28 +96,18 @@ app.post("/user/create-username", async (req, res) => {
   try {
     const { email, username } = req.body;
 
-<<<<<<< HEAD
     if (!username || username.trim().length < 3) {
       return res.status(400).json({ error: "Username must be at least 3 characters" });
     }
 
     if (await User.findOne({ username })) {
       return res.status(400).json({ error: "Username already taken" });
-=======
-    if (!username || username.length < 3) {
-      return res.status(400).json({ error: "Min 3 chars" });
-    }
-
-    if (await User.findOne({ username })) {
-      return res.status(400).json({ error: "Taken" });
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
     }
 
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: "User not found" });
 
     if (user.usernameConfirmed) {
-<<<<<<< HEAD
       return res.status(400).json({ error: "Username already confirmed and cannot be changed" });
     }
 
@@ -171,28 +119,12 @@ app.post("/user/create-username", async (req, res) => {
 
   } catch (err) {
     console.error("CREATE USERNAME ERROR:", err);
-=======
-      return res.status(400).json({ error: "Locked" });
-    }
-
-    user.username = username;
-    user.usernameConfirmed = true;
-    await user.save();
-
-    res.json({ success: true, username });
-
-  } catch {
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
     res.status(500).json({ error: "Server error" });
   }
 });
 
 /* ===================================================== */
-<<<<<<< HEAD
 /* ================= AUTH ============================== */
-=======
-/* ================= AUTH =============================== */
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
 /* ===================================================== */
 
 app.post("/auth/register", async (req, res) => {
@@ -206,11 +138,7 @@ app.post("/auth/register", async (req, res) => {
     }
 
     if (await User.findOne({ email })) {
-<<<<<<< HEAD
       return res.status(400).json({ error: "User already exists" });
-=======
-      return res.status(400).json({ error: "User exists" });
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
     }
 
     const hashed = await bcrypt.hash(password, 10);
@@ -233,7 +161,6 @@ app.post("/auth/register", async (req, res) => {
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
 
-<<<<<<< HEAD
     console.log("📨 Sending OTP to:", email, "| FROM:", process.env.EMAIL_FROM);
 
     const { data, error } = await resend.emails.send({
@@ -259,19 +186,6 @@ app.post("/auth/register", async (req, res) => {
 
   } catch (err) {
     console.error("REGISTER ERROR:", err);
-=======
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM,
-      to: email,
-      subject: "OTP",
-      html: `<h2>${otp}</h2>`,
-    });
-
-    res.json({ success: true });
-
-  } catch (err) {
-    console.error(err);
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -283,12 +197,12 @@ app.post("/auth/verify-otp", async (req, res) => {
     console.log("🔐 OTP verify:", email);
 
     const record = await Otp.findOne({ email });
-    if (!record || record.otp !== otp) {
+
+    if (!record) {
       return res.status(400).json({ error: "Invalid OTP" });
     }
 
     if (record.expiresAt < new Date()) {
-<<<<<<< HEAD
       await Otp.deleteOne({ email });
       return res.status(400).json({ error: "OTP expired. Please register again." });
     }
@@ -301,22 +215,12 @@ app.post("/auth/verify-otp", async (req, res) => {
       name:     record.name,
       hall:     record.hall,
       email:    record.email,
-=======
-      return res.status(400).json({ error: "Expired" });
-    }
-
-    const user = await User.create({
-      name: record.name,
-      hall: record.hall,
-      email,
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
       password: record.password,
       verified: true,
     });
 
     await Otp.deleteOne({ email });
 
-<<<<<<< HEAD
     console.log("✅ User created:", email);
 
     res.json({
@@ -332,11 +236,6 @@ app.post("/auth/verify-otp", async (req, res) => {
 
   } catch (err) {
     console.error("VERIFY OTP ERROR:", err);
-=======
-    res.json({ success: true, user });
-
-  } catch {
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -348,7 +247,6 @@ app.post("/auth/login", async (req, res) => {
     console.log("🔑 Login attempt:", email);
 
     const user = await User.findOne({ email });
-<<<<<<< HEAD
     if (!user) return res.status(400).json({ error: "User not found" });
 
     if (!(await bcrypt.compare(password, user.password))) {
@@ -371,23 +269,11 @@ app.post("/auth/login", async (req, res) => {
 
   } catch (err) {
     console.error("LOGIN ERROR:", err);
-=======
-    if (!user) return res.status(400).json({ error: "Not found" });
-
-    if (!(await bcrypt.compare(password, user.password))) {
-      return res.status(400).json({ error: "Wrong password" });
-    }
-
-    res.json({ success: true, user });
-
-  } catch {
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
     res.status(500).json({ error: "Server error" });
   }
 });
 
 /* ===================================================== */
-<<<<<<< HEAD
 /* ================= ORDER ============================= */
 /* ===================================================== */
 
@@ -637,139 +523,14 @@ app.get("/drivers", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-=======
-/* ================= ORDER ============================== */
-/* ===================================================== */
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
 
-app.post("/order", async (req, res) => {
-  try {
-    const { canteen, items, totalAmount } = req.body;
+/* ------------------ HEALTH ------------------ */
 
-<<<<<<< HEAD
 app.get("/health", (req, res) => res.send("OK"));
 
 /* ------------------ START ------------------ */
-=======
-    if (!canteen || !items || !totalAmount) {
-      return res.status(400).json({ error: "Missing fields" });
-    }
 
-    const order = await Order.create({
-      orderId: uuidv4(),
-      canteen,
-      items,
-      amount: totalAmount,
-      currency: "INR",
-      status: "PENDING_PAYMENT",
-    });
-
-    res.json({ orderId: order.orderId });
-
-  } catch {
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-/* ---------------- Razorpay ---------------- */
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
-
-app.post("/razorpay/create-order", async (req, res) => {
-  try {
-    const { orderId } = req.body;
-
-    const order = await Order.findOne({ orderId });
-    if (!order) return res.status(404).json({ error: "Not found" });
-
-    const rzpOrder = await razorpay.orders.create({
-      amount: order.amount * 100,
-      currency: "INR",
-      receipt: orderId,
-    });
-
-    order.razorpayOrderId = rzpOrder.id;
-    await order.save();
-
-    res.json({
-      razorpayOrderId: rzpOrder.id,
-      key: process.env.RAZORPAY_KEY_ID,
-      amount: rzpOrder.amount,
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Razorpay error" });
-  }
-});
-
-app.post("/razorpay/verify-payment", async (req, res) => {
-  try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-    const expected = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-      .digest("hex");
-
-    if (expected !== razorpay_signature) {
-      return res.status(400).json({ error: "Invalid signature" });
-    }
-
-    const order = await Order.findOneAndUpdate(
-      { razorpayOrderId: razorpay_order_id },
-      { status: "PAID", paymentId: razorpay_payment_id },
-      { new: true }
-    );
-
-    res.json({ success: true, order });
-
-  } catch {
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.get("/order/:orderId/status", async (req, res) => {
-  try {
-    const order = await Order.findOne({ orderId: req.params.orderId });
-
-    if (!order) return res.status(404).json({ error: "Not found" });
-
-    res.json({ status: order.status });
-
-  } catch {
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-/* ===================================================== */
-/* ================= TAXI =============================== */
-/* ===================================================== */
-
-app.get("/rides", async (req, res) => {
-  const rides = await mongoose.connection.db.collection("rides").find().toArray();
-  res.json(rides);
-});
-
-app.post("/rides", async (req, res) => {
-  const ride = await mongoose.connection.db.collection("rides").insertOne({
-    ...req.body,
-    createdAt: new Date(),
-  });
-
-  res.json({ rideId: ride.insertedId });
-});
-
-app.get("/drivers", async (req, res) => {
-  const drivers = await mongoose.connection.db.collection("drivers").find().toArray();
-  res.json(drivers);
-});
-
-/* ---------------- HEALTH ---------------- */
-app.get("/health", (req, res) => res.send("OK"));
-
-/* ---------------- START ---------------- */
 const PORT = process.env.PORT || 10000;
-<<<<<<< HEAD
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
@@ -777,6 +538,3 @@ app.listen(PORT, () => {
   console.log(`🔑 RESEND_API_KEY  : ${process.env.RESEND_API_KEY  ? "set ✅" : "NOT SET ❌"}`);
   console.log(`💳 RAZORPAY_KEY_ID : ${process.env.RAZORPAY_KEY_ID ? "set ✅" : "NOT SET ❌"}`);
 });
-=======
-app.listen(PORT, () => console.log(`🚀 Running on ${PORT}`));
->>>>>>> 1a115fb42dab39eba3cbc8a0ca1323deb26bf44e
