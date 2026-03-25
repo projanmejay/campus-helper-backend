@@ -63,11 +63,11 @@ const razorpay = new Razorpay({
 /* ------------------ RESEND ------------------ */
 
 if (!process.env.RESEND_API_KEY) {
-  console.error("❌ RESEND_API_KEY missing");
+  console.error("❌ RESEND_API_KEY missing — emails will not be sent");
 }
 
 if (!process.env.EMAIL_FROM) {
-  console.error("❌ EMAIL_FROM missing");
+  console.error("❌ EMAIL_FROM missing — emails will not be sent");
 }
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -148,6 +148,8 @@ app.post("/auth/register", async (req, res) => {
   try {
     const { name, hall, email, password } = req.body;
 
+    console.log("📩 Register attempt for:", email);
+
     if (!name || !hall || !email || !password) {
       return res.status(400).json({ error: "All fields required" });
     }
@@ -177,7 +179,9 @@ app.post("/auth/register", async (req, res) => {
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
 
-    await resend.emails.send({
+    console.log("📨 Sending OTP email to:", email, "| FROM:", process.env.EMAIL_FROM);
+
+    const { data, error } = await resend.emails.send({
       from: process.env.EMAIL_FROM,
       to: email,
       subject: "Campus Helper OTP Verification",
@@ -189,6 +193,13 @@ app.post("/auth/register", async (req, res) => {
       `,
     });
 
+    if (error) {
+      console.error("❌ RESEND ERROR:", JSON.stringify(error));
+      return res.status(500).json({ error: "Failed to send OTP email. Please try again." });
+    }
+
+    console.log("✅ OTP email sent successfully | Resend ID:", data?.id);
+
     res.json({ success: true, message: "OTP sent to email" });
   } catch (err) {
     console.error("REGISTER ERROR:", err);
@@ -199,6 +210,8 @@ app.post("/auth/register", async (req, res) => {
 app.post("/auth/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body;
+
+    console.log("🔐 OTP verify attempt for:", email);
 
     const record = await Otp.findOne({ email });
 
@@ -225,6 +238,8 @@ app.post("/auth/verify-otp", async (req, res) => {
 
     await Otp.deleteOne({ email });
 
+    console.log("✅ User verified and created:", email);
+
     res.json({
       success: true,
       message: "Account created successfully",
@@ -240,6 +255,8 @@ app.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    console.log("🔑 Login attempt for:", email);
+
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(400).json({ error: "User not found" });
@@ -249,6 +266,8 @@ app.post("/auth/login", async (req, res) => {
     if (!match) {
       return res.status(400).json({ error: "Invalid password" });
     }
+
+    console.log("✅ Login successful:", email);
 
     res.json({
       success: true,
@@ -340,7 +359,7 @@ app.post("/razorpay/create-order", async (req, res) => {
 
     res.json({
       success: true,
-      razorpayOrderId: razorpayOrder.id, // Flutter reads data['razorpayOrderId']
+      razorpayOrderId: razorpayOrder.id,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency,
       key: process.env.RAZORPAY_KEY_ID,
@@ -364,7 +383,6 @@ app.post("/razorpay/verify-payment", async (req, res) => {
       return res.status(400).json({ error: "Missing payment fields" });
     }
 
-    // Verify HMAC signature
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
@@ -558,4 +576,6 @@ const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📧 Email from: ${process.env.EMAIL_FROM || "NOT SET"}`);
+  console.log(`🔑 Resend API key set: ${!!process.env.RESEND_API_KEY}`);
 });
