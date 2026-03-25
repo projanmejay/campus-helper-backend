@@ -1,101 +1,61 @@
 const mongoose = require("mongoose");
 
 const replySchema = new mongoose.Schema({
-  user: String,
-  comment: String,
-
-  upvotes: {
-    type: Number,
-    default: 0
-  },
-
-  downvotes: {
-    type: Number,
-    default: 0
-  },
-
+  user:      { type: String },
+  comment:   { type: String },
+  upvotes:   { type: Number, default: 0 },
+  downvotes: { type: Number, default: 0 },
   votes: [
     {
       email: String,
-      vote: Number // 1 = upvote, -1 = downvote
-    }
+      vote:  Number, // 1 = upvote, -1 = downvote
+    },
   ],
-
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
+  createdAt: { type: Date, default: Date.now },
 });
 
 const commentSchema = new mongoose.Schema({
-  user: String,
-  comment: String,
-
-  upvotes: {
-    type: Number,
-    default: 0
-  },
-
-  downvotes: {
-    type: Number,
-    default: 0
-  },
-
+  user:      { type: String },
+  comment:   { type: String },
+  upvotes:   { type: Number, default: 0 },
+  downvotes: { type: Number, default: 0 },
   votes: [
     {
       email: String,
-      vote: Number // 1 = upvote, -1 = downvote
-    }
+      vote:  Number, // 1 = upvote, -1 = downvote
+    },
   ],
-
-  replies: [replySchema],
-
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
+  replies:   [replySchema],
+  createdAt: { type: Date, default: Date.now },
 });
 
 const discussionSchema = new mongoose.Schema(
   {
     title: {
-      type: String,
-      required: true
+      type:     String,
+      required: true,
     },
-
     description: {
-      type: String,
-      required: true
+      type:     String,
+      required: true,
     },
-
     author: {
-      type: String,
-      required: true
+      type:     String,
+      required: true,
     },
-
     category: {
-      type: String,
-      default: "General"
+      type:    String,
+      default: "General",
     },
-
-    upvotes: {
-      type: Number,
-      default: 0
-    },
-
-    downvotes: {
-      type: Number,
-      default: 0
-    },
-
+    upvotes:   { type: Number, default: 0 },
+    downvotes: { type: Number, default: 0 },
     votes: [
       {
         email: String,
-        vote: Number // 1 = upvote, -1 = downvote
-      }
+        vote:  Number, // 1 = upvote, -1 = downvote
+      },
     ],
-
-    comments: [commentSchema]
+    comments: [commentSchema],
   },
   { timestamps: true }
 );

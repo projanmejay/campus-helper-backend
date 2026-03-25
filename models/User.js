@@ -3,43 +3,36 @@ const mongoose = require("mongoose");
 const userSchema = new mongoose.Schema({
   name: {
     type: String,
-    required: true
+    required: true,
   },
-
   hall: {
     type: String,
-    required: true
+    required: true,
   },
-
   email: {
     type: String,
     required: true,
-    unique: true
+    unique: true,
   },
-
   password: {
     type: String,
-    required: true
+    required: true,
   },
-
   verified: {
     type: Boolean,
-    default: false
+    default: false,
   },
-
   // discussion username
   username: {
     type: String,
     unique: true,
-    sparse: true
+    sparse: true,       // allows multiple null values (users without usernames)
   },
-
   // ensures username can only be set once
   usernameConfirmed: {
     type: Boolean,
-    default: false
-  }
-
+    default: false,
+  },
 });
 
 module.exports = mongoose.model("User", userSchema);
