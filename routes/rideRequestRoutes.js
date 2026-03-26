@@ -92,14 +92,15 @@ router.post("/", async (req, res) => {
     // Create Razorpay order
     const rzpOrder = await createRzpOrder(amt, receipt);
 
-    // Save ride request (unpaid until verify-payment is called)
+    // Save ride request — amountPaid stays 0 until verify-payment is called
     const request = await RideRequest.create({
       userId, userName, userPhone, userEmail, userRoll, fcmToken,
       from, to,
       dateTime: new Date(dateTime),
-      amountPaid:      amt,
+      amountPaid:      0,          // set only after payment verified
       commission:      comm,
       razorpayOrderId: rzpOrder.id,
+      paymentVerified: false,
       status:          "pending",
     });
 
@@ -138,17 +139,21 @@ router.post("/:id/verify-payment", async (req, res) => {
       return res.status(400).json({ error: "Payment verification failed" });
     }
 
+    const ride = await RideRequest.findById(req.params.id);
+    if (!ride) return res.status(404).json({ error: "Request not found" });
+
     const request = await RideRequest.findByIdAndUpdate(
       req.params.id,
       {
         razorpayPaymentId: razorpay_payment_id,
         razorpaySignature: razorpay_signature,
         paymentVerified:   true,
+        amountPaid:        upfront(ride.to),
       },
       { new: true }
     );
 
-    if (!request) return res.status(404).json({ error: "Request not found" });
+
 
     res.json({ success: true, message: "Payment verified. We'll notify you when matched." });
   } catch (err) {
