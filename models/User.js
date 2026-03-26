@@ -18,6 +18,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  phone: {
+    type: String,
+    default: "",
+  },
   verified: {
     type: Boolean,
     default: false,

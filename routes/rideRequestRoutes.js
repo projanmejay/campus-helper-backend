@@ -5,6 +5,8 @@ const { v4: uuidv4 } = require("uuid");
 const cron        = require("node-cron");
 const Razorpay    = require("razorpay");
 const RideRequest = require("../models/RideRequest");
+const User        = require("../models/User");
+const { authenticate } = require("../middleware/auth");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG
@@ -74,12 +76,17 @@ async function sendPush(token, title, body) {
 // POST /ride-requests
 // Create request + Razorpay order for upfront payment
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/", async (req, res) => {
+router.post("/", authenticate, async (req, res) => {
   try {
-    const { userId, userName, userPhone, userEmail, userRoll, fcmToken, from, to, dateTime } = req.body;
+    const { from, to, dateTime, fcmToken } = req.body;
+    const user = await User.findById(req.user.userId);
 
-    if (!userId || !from || !to || !dateTime) {
-      return res.status(400).json({ error: "userId, from, to, dateTime are required" });
+    if (!user || !user.email) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    if (!from || !to || !dateTime) {
+      return res.status(400).json({ error: "from, to, dateTime are required" });
     }
     if (!FARE[to]) {
       return res.status(400).json({ error: "Invalid destination" });
@@ -94,8 +101,14 @@ router.post("/", async (req, res) => {
 
     // Save ride request (unpaid until verify-payment is called)
     const request = await RideRequest.create({
-      userId, userName, userPhone, userEmail, userRoll, fcmToken,
-      from, to,
+      userId:       user._id.toString(),
+      userName:     user.username || user.name,
+      userPhone:    user.phone || "",
+      userEmail:    user.email,
+      userRoll:     "",
+      fcmToken:     fcmToken || "",
+      from,
+      to,
       dateTime: new Date(dateTime),
       amountPaid:      amt,
       commission:      comm,
@@ -123,7 +136,7 @@ router.post("/", async (req, res) => {
 // POST /ride-requests/:id/verify-payment
 // Verify Razorpay signature after user pays upfront amount
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/:id/verify-payment", async (req, res) => {
+router.post("/:id/verify-payment", authenticate, async (req, res) => {
   try {
     const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
 
@@ -138,15 +151,15 @@ router.post("/:id/verify-payment", async (req, res) => {
       return res.status(400).json({ error: "Payment verification failed" });
     }
 
-    const request = await RideRequest.findByIdAndUpdate(
-      req.params.id,
-      {
-        razorpayPaymentId: razorpay_payment_id,
-        razorpaySignature: razorpay_signature,
-        paymentVerified:   true,
-      },
-      { new: true }
-    );
+    const request = await RideRequest.findById(req.params.id);
+    if (!request || request.userId !== req.user.userId) {
+      return res.status(404).json({ error: "Request not found" });
+    }
+
+    request.razorpayPaymentId = razorpay_payment_id;
+    request.razorpaySignature = razorpay_signature;
+    request.paymentVerified = true;
+    await request.save();
 
     if (!request) return res.status(404).json({ error: "Request not found" });
 
@@ -161,10 +174,14 @@ router.post("/:id/verify-payment", async (req, res) => {
 // GET /ride-requests/user/:userId
 // User's own bookings for "My Bookings" tab
 // ─────────────────────────────────────────────────────────────────────────────
-router.get("/user/:userId", async (req, res) => {
+router.get("/user/:userId", authenticate, async (req, res) => {
   try {
+    if (req.params.userId !== req.user.userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
     const requests = await RideRequest
-      .find({ userId: req.params.userId })
+      .find({ userId: req.user.userId })
       .sort({ createdAt: -1 });
     res.json(requests);
   } catch (err) {
@@ -175,9 +192,9 @@ router.get("/user/:userId", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /ride-requests/all  — admin view
 // ─────────────────────────────────────────────────────────────────────────────
-router.get("/all", async (req, res) => {
+router.get("/all", authenticate, async (req, res) => {
   try {
-    const requests = await RideRequest.find().sort({ createdAt: -1 });
+    const requests = await RideRequest.find({ userId: req.user.userId }).sort({ createdAt: -1 });
     res.json(requests);
   } catch (err) {
     res.status(500).json({ error: "Server error" });
@@ -188,11 +205,11 @@ router.get("/all", async (req, res) => {
 // POST /ride-requests/:id/solo-decision
 // User decides: pay full or opt out (called from solo_decision status card)
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/:id/solo-decision", async (req, res) => {
+router.post("/:id/solo-decision", authenticate, async (req, res) => {
   try {
     const { payFull } = req.body;
     const request = await RideRequest.findById(req.params.id);
-    if (!request) return res.status(404).json({ error: "Not found" });
+    if (!request || request.userId !== req.user.userId) return res.status(404).json({ error: "Not found" });
     if (request.status !== "solo_decision") {
       return res.status(400).json({ error: "Request is not in solo_decision state" });
     }
@@ -237,8 +254,12 @@ router.post("/:id/solo-decision", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // DELETE /ride-requests/:id  — cancel unpaid request
 // ─────────────────────────────────────────────────────────────────────────────
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", authenticate, async (req, res) => {
   try {
+    const request = await RideRequest.findById(req.params.id);
+    if (!request || request.userId !== req.user.userId) {
+      return res.status(404).json({ error: "Not found" });
+    }
     await RideRequest.findByIdAndDelete(req.params.id);
     res.json({ success: true });
   } catch (err) {

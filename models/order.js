@@ -2,11 +2,12 @@ const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema(
   {
+    userId:           { type: String, required: true },
     orderId:          { type: String, required: true, unique: true },
     canteen:          { type: String },
     items:            { type: Object },
     totalAmount:      { type: Number },
-    amount:           { type: Number },          // used by razorpay (paise calc)
+    amount:           { type: Number, required: true },          // used by razorpay (paise calc)
     currency:         { type: String, default: "INR" },
     orderType:        { type: String, default: "Takeaway" },
     deliveryLocation: { type: String, default: null },

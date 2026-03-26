@@ -13,9 +13,11 @@ const { Resend }    = require("resend");
 
 const discussionRoutes = require("./routes/discussionRoutes");
 const rideRequestRoutes = require("./routes/rideRequestRoutes");
+const { createToken, authenticate } = require("./middleware/auth");
 const User  = require("./models/User");
 const Otp   = require("./models/otp");
 const Order = require("./models/order");
+const PasswordReset = require("./models/PasswordReset");
 
 const app = express();
 
@@ -44,6 +46,7 @@ if (!process.env.RESEND_API_KEY)        console.error("❌ RESEND_API_KEY missin
 if (!process.env.EMAIL_FROM)            console.error("❌ EMAIL_FROM missing — emails will not be sent");
 if (!process.env.RAZORPAY_KEY_ID)       console.error("❌ RAZORPAY_KEY_ID missing");
 if (!process.env.RAZORPAY_KEY_SECRET)   console.error("❌ RAZORPAY_KEY_SECRET missing");
+if (!process.env.JWT_SECRET)            console.error("❌ JWT_SECRET missing — authentication will not work");
 
 /* ------------------ DB ------------------ */
 
@@ -93,9 +96,9 @@ app.get("/user/check-username", async (req, res) => {
   }
 });
 
-app.post("/user/create-username", async (req, res) => {
+app.post("/user/create-username", authenticate, async (req, res) => {
   try {
-    const { email, username } = req.body;
+    const { username } = req.body;
 
     if (!username || username.trim().length < 3) {
       return res.status(400).json({ error: "Username must be at least 3 characters" });
@@ -105,7 +108,7 @@ app.post("/user/create-username", async (req, res) => {
       return res.status(400).json({ error: "Username already taken" });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
     if (user.usernameConfirmed) {
@@ -227,11 +230,13 @@ app.post("/auth/verify-otp", async (req, res) => {
     res.json({
       success: true,
       message: "Account created successfully",
+      token: createToken(user),
       user: {
-        id:    user._id,
-        name:  user.name,
-        hall:  user.hall,
-        email: user.email,
+        id:       user._id,
+        name:     user.name,
+        hall:     user.hall,
+        email:    user.email,
+        username: user.username || null,
       },
     });
 
@@ -258,7 +263,7 @@ app.post("/auth/login", async (req, res) => {
 
     res.json({
       success: true,
-      message: "Login successful",
+      token: createToken(user),
       user: {
         id:       user._id,
         name:     user.name,
@@ -275,6 +280,86 @@ app.post("/auth/login", async (req, res) => {
 });
 
 /* ===================================================== */
+/* ============== FORGOT / RESET PASSWORD ============== */
+/* ===================================================== */
+
+app.post('/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+
+    const user = await User.findOne({ email });
+
+    // To avoid user enumeration, always respond with success. But only create token if user exists.
+    if (!user) {
+      return res.json({ success: true, message: 'If the account exists, a reset email will be sent.' });
+    }
+
+    // Delete any existing tokens for this email
+    await PasswordReset.deleteMany({ email });
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await PasswordReset.create({ email, token, expiresAt });
+
+    // Send reset email
+    const resetLink = `${process.env.FRONTEND_URL || 'https://campus-helper.app'}/reset-password?token=${token}`;
+
+    const { data, error } = await resend.emails.send({
+      from: process.env.EMAIL_FROM,
+      to: email,
+      subject: 'Campus Helper — Password reset',
+      html: `
+        <h3>Password reset request</h3>
+        <p>Click the link below to reset your password. This link is valid for 1 hour.</p>
+        <p><a href="${resetLink}">Reset your password</a></p>
+        <p>If you did not request this, ignore this email.</p>
+      `,
+    });
+
+    if (error) {
+      console.error('RESEND ERROR (forgot-password):', JSON.stringify(error));
+      // Still respond success to frontend
+      return res.json({ success: true, message: 'If the account exists, a reset email will be sent.' });
+    }
+
+    res.json({ success: true, message: 'If the account exists, a reset email will be sent.' });
+  } catch (err) {
+    console.error('FORGOT PASSWORD ERROR:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/auth/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) return res.status(400).json({ error: 'token and password required' });
+
+    const record = await PasswordReset.findOne({ token });
+    if (!record) return res.status(400).json({ error: 'Invalid or expired token' });
+    if (record.expiresAt < new Date()) {
+      await PasswordReset.deleteOne({ token });
+      return res.status(400).json({ error: 'Token expired' });
+    }
+
+    const user = await User.findOne({ email: record.email });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    const hashed = await bcrypt.hash(password, 10);
+    user.password = hashed;
+    await user.save();
+
+    await PasswordReset.deleteMany({ email: record.email });
+
+    res.json({ success: true, message: 'Password reset successfully' });
+  } catch (err) {
+    console.error('RESET PASSWORD ERROR:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* ===================================================== */
 /* ================= ORDER ============================= */
 /* ===================================================== */
 
@@ -283,7 +368,7 @@ app.post("/auth/login", async (req, res) => {
   Body: { canteen, items, totalAmount, orderType?, deliveryLocation?, deliveryDetails? }
   Returns: { orderId }
 */
-app.post("/order", async (req, res) => {
+app.post("/order", authenticate, async (req, res) => {
   try {
     const { canteen, items, totalAmount, orderType, deliveryLocation, deliveryDetails } = req.body;
 
@@ -293,6 +378,7 @@ app.post("/order", async (req, res) => {
 
     const order = await Order.create({
       orderId:          uuidv4(),
+      userId:           req.user.userId,
       canteen,
       items,
       totalAmount,
@@ -317,13 +403,13 @@ app.post("/order", async (req, res) => {
   Body: { orderId }
   Returns: { razorpayOrderId, amount, currency, key }
 */
-app.post("/razorpay/create-order", async (req, res) => {
+app.post("/razorpay/create-order", authenticate, async (req, res) => {
   try {
     const { orderId } = req.body;
 
     if (!orderId) return res.status(400).json({ error: "orderId is required" });
 
-    const order = await Order.findOne({ orderId });
+    const order = await Order.findOne({ orderId, userId: req.user.userId });
     if (!order) return res.status(404).json({ error: "Order not found" });
 
     const rzpOrder = await razorpay.orders.create({
@@ -353,7 +439,7 @@ app.post("/razorpay/create-order", async (req, res) => {
   STEP 3 — Flutter: POST /razorpay/verify-payment
   Body: { razorpay_payment_id, razorpay_order_id, razorpay_signature }
 */
-app.post("/razorpay/verify-payment", async (req, res) => {
+app.post("/razorpay/verify-payment", authenticate, async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
@@ -370,18 +456,14 @@ app.post("/razorpay/verify-payment", async (req, res) => {
       return res.status(400).json({ error: "Payment verification failed" });
     }
 
-    const order = await Order.findOneAndUpdate(
-      { razorpayOrderId: razorpay_order_id },
-      {
-        paymentId: razorpay_payment_id,
-        signature: razorpay_signature,
-        status:    "PAID",
-        paidAt:    new Date(),
-      },
-      { new: true }
-    );
-
+    const order = await Order.findOne({ razorpayOrderId: razorpay_order_id, userId: req.user.userId });
     if (!order) return res.status(404).json({ error: "Order not found" });
+
+    order.paymentId = razorpay_payment_id;
+    order.signature = razorpay_signature;
+    order.status = "PAID";
+    order.paidAt = new Date();
+    await order.save();
 
     res.json({ success: true, message: "Payment verified", orderId: order.orderId });
 
@@ -395,9 +477,9 @@ app.post("/razorpay/verify-payment", async (req, res) => {
   STEP 4 — Flutter: GET /order/:orderId/status
   Returns: { status } — "PENDING_PAYMENT" | "PAID" | "FAILED"
 */
-app.get("/order/:orderId/status", async (req, res) => {
+app.get("/order/:orderId/status", authenticate, async (req, res) => {
   try {
-    const order = await Order.findOne({ orderId: req.params.orderId });
+    const order = await Order.findOne({ orderId: req.params.orderId, userId: req.user.userId });
 
     if (!order) return res.status(404).json({ error: "Order not found" });
 
@@ -410,9 +492,14 @@ app.get("/order/:orderId/status", async (req, res) => {
 });
 
 /* ORDER HISTORY — GET /orders */
-app.get("/orders", async (req, res) => {
+app.get("/orders", authenticate, async (req, res) => {
   try {
-    const orders = await Order.find().sort({ createdAt: -1 });
+    const requestedUserId = req.query.userId;
+    if (requestedUserId && requestedUserId !== req.user.userId) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
+    const orders = await Order.find({ userId: req.user.userId }).sort({ createdAt: -1 });
     res.json(orders);
   } catch (err) {
     console.error("GET ORDERS ERROR:", err);

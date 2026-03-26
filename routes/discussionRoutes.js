@@ -2,14 +2,14 @@ const express = require("express");
 const router = express.Router();
 const Discussion = require("../models/Discussion");
 const User = require("../models/User");
+const { authenticate } = require("../middleware/auth");
 
 /* ================= CREATE DISCUSSION POST ================= */
 
-router.post("/create", async (req, res) => {
+router.post("/create", authenticate, async (req, res) => {
   try {
-    const { title, description, email, category } = req.body;
-
-    const user = await User.findOne({ email });
+    const { title, description, category } = req.body;
+    const user = await User.findById(req.user.userId);
 
     if (!user || !user.username) {
       return res.status(400).json({
@@ -49,9 +49,10 @@ router.get("/all", async (req, res) => {
 
 /* ================= VOTE POST ================= */
 
-router.post("/vote/:id", async (req, res) => {
+router.post("/vote/:id", authenticate, async (req, res) => {
   try {
-    const { email, vote } = req.body; // vote = 1 or -1
+    const { vote } = req.body; // vote = 1 or -1
+    const email = req.user.email;
 
     const post = await Discussion.findById(req.params.id);
 
@@ -95,11 +96,10 @@ router.post("/vote/:id", async (req, res) => {
 
 /* ================= ADD COMMENT ================= */
 
-router.post("/comment", async (req, res) => {
+router.post("/comment", authenticate, async (req, res) => {
   try {
-    const { postId, email, comment } = req.body;
-
-    const user = await User.findOne({ email });
+    const { postId, comment } = req.body;
+    const user = await User.findById(req.user.userId);
 
     if (!user || !user.username) {
       return res.status(400).json({ success: false, message: "Create username first" });
@@ -125,9 +125,10 @@ router.post("/comment", async (req, res) => {
 
 /* ================= COMMENT VOTE ================= */
 
-router.post("/comment/vote", async (req, res) => {
+router.post("/comment/vote", authenticate, async (req, res) => {
   try {
-    const { postId, commentId, email, vote } = req.body;
+    const { postId, commentId, vote } = req.body;
+    const email = req.user.email;
 
     const post = await Discussion.findById(postId);
 
@@ -170,11 +171,10 @@ router.post("/comment/vote", async (req, res) => {
 
 /* ================= REPLY TO COMMENT ================= */
 
-router.post("/reply", async (req, res) => {
+router.post("/reply", authenticate, async (req, res) => {
   try {
-    const { postId, commentId, email, comment } = req.body;
-
-    const user = await User.findOne({ email });
+    const { postId, commentId, comment } = req.body;
+    const user = await User.findById(req.user.userId);
 
     if (!user || !user.username) {
       return res.status(400).json({ success: false, message: "Create username first" });
@@ -206,9 +206,10 @@ router.post("/reply", async (req, res) => {
 
 /* ================= REPLY VOTE ================= */
 
-router.post("/reply/vote", async (req, res) => {
+router.post("/reply/vote", authenticate, async (req, res) => {
   try {
-    const { postId, commentId, replyId, email, vote } = req.body;
+    const { postId, commentId, replyId, vote } = req.body;
+    const email = req.user.email;
 
     const post = await Discussion.findById(postId);
 
