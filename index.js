@@ -285,7 +285,11 @@ app.post("/auth/login", async (req, res) => {
 */
 app.post("/order", async (req, res) => {
   try {
-    const { canteen, items, totalAmount, orderType, deliveryLocation, deliveryDetails } = req.body;
+    const {
+      canteen, items, totalAmount, orderType,
+      deliveryLocation, deliveryDetails,
+      userId, userName, userEmail, userHall,
+    } = req.body;
 
     if (!canteen || !items || !totalAmount) {
       return res.status(400).json({ error: "canteen, items, and totalAmount are required" });
@@ -302,6 +306,11 @@ app.post("/order", async (req, res) => {
       deliveryLocation: deliveryLocation || null,
       deliveryDetails:  deliveryDetails  || null,
       status:           "PENDING_PAYMENT",
+      orderStatus:      "PLACED",
+      userId:           userId           || null,
+      userName:         userName         || null,
+      userEmail:        userEmail        || null,
+      userHall:         userHall         || null,
     });
 
     res.status(201).json({ success: true, orderId: order.orderId });
@@ -373,10 +382,11 @@ app.post("/razorpay/verify-payment", async (req, res) => {
     const order = await Order.findOneAndUpdate(
       { razorpayOrderId: razorpay_order_id },
       {
-        paymentId: razorpay_payment_id,
-        signature: razorpay_signature,
-        status:    "PAID",
-        paidAt:    new Date(),
+        paymentId:    razorpay_payment_id,
+        signature:    razorpay_signature,
+        status:       "PAID",
+        orderStatus:  "PLACED",
+        paidAt:       new Date(),
       },
       { new: true }
     );
@@ -401,7 +411,12 @@ app.get("/order/:orderId/status", async (req, res) => {
 
     if (!order) return res.status(404).json({ error: "Order not found" });
 
-    res.json({ success: true, status: order.status, orderId: order.orderId });
+    res.json({
+      success:     true,
+      status:      order.status,
+      orderStatus: order.orderStatus || "PLACED",
+      orderId:     order.orderId,
+    });
 
   } catch (err) {
     console.error("GET ORDER STATUS ERROR:", err);
@@ -409,10 +424,53 @@ app.get("/order/:orderId/status", async (req, res) => {
   }
 });
 
-/* ORDER HISTORY — GET /orders */
+/*
+  PATCH /order/:orderId/status
+  Body: { status } — updates the orderStatus (preparation workflow)
+  Used by Canteen-owner admin app
+*/
+app.patch("/order/:orderId/status", async (req, res) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = [
+      "PLACED", "PREPARING", "READY",
+      "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED",
+      "CANCELLED",
+    ];
+
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        error: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+      });
+    }
+
+    const order = await Order.findOneAndUpdate(
+      { orderId: req.params.orderId },
+      { orderStatus: status },
+      { new: true }
+    );
+
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    res.json({
+      success:     true,
+      orderId:     order.orderId,
+      orderStatus: order.orderStatus,
+    });
+
+  } catch (err) {
+    console.error("UPDATE ORDER STATUS ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* ORDER HISTORY — GET /orders  (optional ?userId=xxx to filter) */
 app.get("/orders", async (req, res) => {
   try {
-    const orders = await Order.find().sort({ createdAt: -1 });
+    const filter = {};
+    if (req.query.userId) filter.userId = req.query.userId;
+
+    const orders = await Order.find(filter).sort({ createdAt: -1 });
     res.json(orders);
   } catch (err) {
     console.error("GET ORDERS ERROR:", err);
@@ -447,7 +505,7 @@ app.post("/razorpay/webhook", async (req, res) => {
       const payment = event.payload.payment.entity;
       await Order.findOneAndUpdate(
         { razorpayOrderId: payment.order_id },
-        { paymentId: payment.id, status: "PAID", paidAt: new Date() }
+        { paymentId: payment.id, status: "PAID", orderStatus: "PLACED", paidAt: new Date() }
       );
     }
 

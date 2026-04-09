@@ -11,12 +11,25 @@ const orderSchema = new mongoose.Schema(
     orderType:        { type: String, default: "Takeaway" },
     deliveryLocation: { type: String, default: null },
     deliveryDetails:  { type: String, default: null },
+
+    // ─── Payment status ───
     status:           { type: String, default: "PENDING_PAYMENT" },
     razorpayOrderId:  { type: String, default: null },
     paymentId:        { type: String, default: null },
     signature:        { type: String, default: null },
     paidAt:           { type: Date,   default: null },
     expiresAt:        { type: Date,   default: null },
+
+    // ─── Who ordered ───
+    userId:           { type: String, default: null },
+    userName:         { type: String, default: null },
+    userEmail:        { type: String, default: null },
+    userHall:         { type: String, default: null },
+
+    // ─── Order preparation / fulfillment status ───
+    // PLACED → PREPARING → READY → PICKED_UP (takeaway/dine-in)
+    // PLACED → PREPARING → READY → OUT_FOR_DELIVERY → DELIVERED (delivery)
+    orderStatus:      { type: String, default: "PLACED" },
   },
   { timestamps: true }
 );
