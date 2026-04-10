@@ -25,6 +25,7 @@ const orderSchema = new mongoose.Schema(
     userName:         { type: String, default: null },
     userEmail:        { type: String, default: null },
     userHall:         { type: String, default: null },
+    userPhone:        { type: String, default: null },
 
     // ─── Order preparation / fulfillment status ───
     // PLACED → PREPARING → READY → PICKED_UP (takeaway/dine-in)

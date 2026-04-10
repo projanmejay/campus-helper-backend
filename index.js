@@ -232,6 +232,8 @@ app.post("/auth/verify-otp", async (req, res) => {
         name:  user.name,
         hall:  user.hall,
         email: user.email,
+        hall:  user.hall,
+        phone: user.phone || '',
       },
     });
 
@@ -262,14 +264,47 @@ app.post("/auth/login", async (req, res) => {
       user: {
         id:       user._id,
         name:     user.name,
-        hall:     user.hall,
         email:    user.email,
+        hall:     user.hall,
+        phone:    user.phone || '',
         username: user.username || null,
       },
     });
 
   } catch (err) {
     console.error("LOGIN ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/auth/update", async (req, res) => {
+  try {
+    const { userId, name, hall, phone } = req.body;
+
+    if (!userId) return res.status(400).json({ error: "userId is required" });
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    if (name) user.name = name;
+    if (hall) user.hall = hall;
+    if (phone) user.phone = phone;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully",
+      user: {
+        id: user._id,
+        name: user.name,
+        hall: user.hall,
+        email: user.email,
+        phone: user.phone || '',
+      }
+    });
+  } catch (err) {
+    console.error("UPDATE ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -311,6 +346,7 @@ app.post("/order", async (req, res) => {
       userName:         userName         || null,
       userEmail:        userEmail        || null,
       userHall:         userHall         || null,
+      userPhone:        req.body.userPhone || null,
     });
 
     res.status(201).json({ success: true, orderId: order.orderId });
