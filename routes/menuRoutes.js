@@ -42,6 +42,26 @@ router.patch("/canteen/:canteenId/status", async (req, res) => {
 });
 
 /**
+ * @route PATCH /menu/canteen/:canteenId/fee
+ * @desc  Update canteen packaging fee (Admin)
+ */
+router.patch("/canteen/:canteenId/fee", async (req, res) => {
+  try {
+    const { packagingFee } = req.body;
+    let canteen = await Canteen.findOneAndUpdate(
+      { canteenId: req.params.canteenId },
+      { packagingFee },
+      { new: true }
+    );
+    if (!canteen) return res.status(404).json({ error: "Canteen not found" });
+    res.json({ success: true, canteen });
+  } catch (err) {
+    console.error("UPDATE PACKAGING FEE ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
  * @route GET /menu/:canteenId
  * @desc  Fetch menu for a specific canteen, organized by categories
  */

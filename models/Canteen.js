@@ -4,6 +4,7 @@ const canteenSchema = new mongoose.Schema({
   canteenId: { type: String, required: true, unique: true }, // unique string ID for routing/matching
   name: { type: String, required: true },
   status: { type: String, enum: ["Open", "Closed"], default: "Open" },
+  packagingFee: { type: Number, default: 0 },
   ratingSum: { type: Number, default: 0 },
   ratingCount: { type: Number, default: 0 },
 }, { timestamps: true });

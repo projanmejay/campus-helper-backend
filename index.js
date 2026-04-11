@@ -18,6 +18,7 @@ const menuRoutes = require("./routes/menuRoutes");
 const User  = require("./models/User");
 const Otp   = require("./models/otp");
 const Order = require("./models/order");
+const MenuItem = require("./models/MenuItem");
 
 const app = express();
 
@@ -529,6 +530,64 @@ app.get("/orders", async (req, res) => {
     res.json(orders);
   } catch (err) {
     console.error("GET ORDERS ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * POST /orders/:orderId/rate
+ * Body: { itemName, score }
+ * Rates a specific food item from a delivered order
+ */
+app.post("/orders/:orderId/rate", async (req, res) => {
+  try {
+    const { itemName, score } = req.body;
+    const { orderId } = req.params;
+
+    if (!itemName || !score || score < 1 || score > 5) {
+      return res.status(400).json({ error: "itemName and score (1-5) are required" });
+    }
+
+    const order = await Order.findOne({ orderId });
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    const completedStatuses = ["DELIVERED", "PICKED_UP"];
+    if (!completedStatuses.includes(order.orderStatus)) {
+      return res.status(400).json({ error: "Order is not yet completed" });
+    }
+
+    if (order.ratedItems && order.ratedItems.includes(itemName)) {
+      return res.status(400).json({ error: "Item already rated" });
+    }
+
+    // Find the MenuItem by name and canteen
+    const canteenMapping = {
+      'AZAD Canteen': 'azad_hall',
+      'LLR Canteen': 'llr_canteen',
+      'VS Canteen': 'vs_canteen',
+      'HJB Canteen': 'hjb_canteen',
+      'RK Canteen': 'rk_hall',
+      'RP Canteen': 'rp_canteen',
+    };
+    const canteenId = canteenMapping[order.canteen] || order.canteen;
+
+    const menuItem = await MenuItem.findOne({ canteenId, name: itemName });
+    if (menuItem) {
+      menuItem.ratingSum += score;
+      menuItem.ratingCount += 1;
+      await menuItem.save();
+    }
+
+    // Track that this item has been rated
+    await Order.findOneAndUpdate(
+      { orderId },
+      { $push: { ratedItems: itemName } }
+    );
+
+    res.json({ success: true, message: "Rating submitted" });
+
+  } catch (err) {
+    console.error("RATE ITEM ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
