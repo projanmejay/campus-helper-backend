@@ -13,6 +13,7 @@ const { Resend }    = require("resend");
 
 const discussionRoutes = require("./routes/discussionRoutes");
 const rideRequestRoutes = require("./routes/rideRequestRoutes");
+const busRoutes = require("./routes/busRoutes");
 const User  = require("./models/User");
 const Otp   = require("./models/otp");
 const Order = require("./models/order");
@@ -58,6 +59,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 app.use("/discussion", discussionRoutes);
 app.use("/ride-requests", rideRequestRoutes);
+app.use("/bus", busRoutes);
 /* ------------------ SERVICES ------------------ */
 
 const razorpay = new Razorpay({
