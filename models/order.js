@@ -31,7 +31,15 @@ const orderSchema = new mongoose.Schema(
     // PLACED → PREPARING → READY → PICKED_UP (takeaway/dine-in)
     // PLACED → PREPARING → READY → OUT_FOR_DELIVERY → DELIVERED (delivery)
     orderStatus:      { type: String, default: "PLACED" },
+    
+    // ⏰ Preparation Timer
+    estimatedPrepTime: { type: Number, default: 0 },   // in minutes
+    prepStartedAt:     { type: Date,   default: null },
+    
+    // 📝 User Instructions (replaces deliveryDetails usage)
+    instructions:      { type: String, default: null },
   },
+
   { timestamps: true }
 );
 

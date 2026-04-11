@@ -344,6 +344,7 @@ app.post("/order", async (req, res) => {
       orderType:        orderType        || "Takeaway",
       deliveryLocation: deliveryLocation || null,
       deliveryDetails:  deliveryDetails  || null,
+      instructions:     req.body.instructions || null,
       status:           "PENDING_PAYMENT",
       orderStatus:      "PLACED",
       userId:           userId           || null,
@@ -471,7 +472,7 @@ app.get("/order/:orderId/status", async (req, res) => {
 */
 app.patch("/order/:orderId/status", async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, estimatedPrepTime } = req.body;
     const validStatuses = [
       "PLACED", "PREPARING", "READY",
       "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED",
@@ -484,9 +485,19 @@ app.patch("/order/:orderId/status", async (req, res) => {
       });
     }
 
+    const updateData = { orderStatus: status };
+    
+    // If moving to PREPARING, set timer stuff
+    if (status === "PREPARING") {
+      updateData.prepStartedAt = new Date();
+      if (estimatedPrepTime) {
+        updateData.estimatedPrepTime = Number(estimatedPrepTime);
+      }
+    }
+
     const order = await Order.findOneAndUpdate(
       { orderId: req.params.orderId },
-      { orderStatus: status },
+      updateData,
       { new: true }
     );
 
@@ -496,6 +507,8 @@ app.patch("/order/:orderId/status", async (req, res) => {
       success:     true,
       orderId:     order.orderId,
       orderStatus: order.orderStatus,
+      estimatedPrepTime: order.estimatedPrepTime,
+      prepStartedAt: order.prepStartedAt,
     });
 
   } catch (err) {
