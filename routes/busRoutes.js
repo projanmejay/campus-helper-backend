@@ -46,4 +46,16 @@ router.get('/live', async (req, res) => {
   }
 });
 
+// DELETE /location/:routeId (when Driver stops broadcasting)
+router.delete('/location/:routeId', async (req, res) => {
+  try {
+    const { routeId } = req.params;
+    await BusLocation.deleteOne({ routeId });
+    res.json({ success: true, message: 'Broadcast stopped and location removed' });
+  } catch (error) {
+    console.error('Error stopping broadcast:', error);
+    res.status(500).json({ error: 'Failed to stop broadcast' });
+  }
+});
+
 module.exports = router;
