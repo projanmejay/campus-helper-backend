@@ -8,6 +8,8 @@ const menuItemSchema = new mongoose.Schema({
   price: { type: Number, required: true },
   isVeg: { type: Boolean, default: true },
   isAvailable: { type: Boolean, default: true },
+  itemOrder: { type: Number, default: 0 },
+  sectionOrder: { type: Number, default: 0 },
   ratingSum: { type: Number, default: 0 },
   ratingCount: { type: Number, default: 0 },
 }, { timestamps: true });

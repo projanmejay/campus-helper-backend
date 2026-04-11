@@ -32,24 +32,19 @@ async function migrate() {
       }
 
       const menuData = JSON.parse(fs.readFileSync(menuPath, "utf8"));
-      const sections = menuData.sections;
-
-      for (const section of sections) {
-        console.log(`  📂 Section: ${section.title}`);
-        for (const item of section.items) {
-          try {
-            // POST each item to the backend
-            await axios.post(`${BACKEND_URL}/menu/${c.id}`, {
-              category: section.title,
-              name: item.name,
-              price: item.price,
-              isVeg: item.isVeg !== undefined ? item.isVeg : true,
-              id: item.id
-            });
-            console.log(`    ✅ Added: ${item.name}`);
-          } catch (itemErr) {
-            console.error(`    ❌ Failed: ${item.name} -> ${itemErr.response?.data?.error || itemErr.message}`);
+      
+      // Handle both formats: { sections: [...] } and { menu: [...] }
+      if (menuData.sections) {
+        for (const section of menuData.sections) {
+          console.log(`  📂 Section: ${section.title}`);
+          for (const item of section.items) {
+            await uploadItem(c.id, item, section.title);
           }
+        }
+      } else if (menuData.menu) {
+        console.log(`  📂 Flat Menu List`);
+        for (const item of menuData.menu) {
+          await uploadItem(c.id, item, "General");
         }
       }
     }
@@ -57,6 +52,26 @@ async function migrate() {
     console.log("✨ Migration Complete!");
   } catch (err) {
     console.error("❌ Migration Failed:", err);
+  }
+}
+
+async function uploadItem(canteenId, item, category) {
+  try {
+    await axios.post(`${BACKEND_URL}/menu/${canteenId}`, {
+      category: category,
+      name: item.name,
+      price: item.price,
+      isVeg: item.isVeg !== undefined ? item.isVeg : true,
+      id: item.id
+    });
+    console.log(`    ✅ Added: ${item.name}`);
+  } catch (itemErr) {
+    if (itemErr.response?.status === 502) {
+      console.warn(`    ⏳ Retrying (502): ${item.name}`);
+      // Simple one-time retry for Render timeouts
+      return uploadItem(canteenId, item, category);
+    }
+    console.error(`    ❌ Failed: ${item.name} -> ${itemErr.response?.data?.error || itemErr.message}`);
   }
 }
 

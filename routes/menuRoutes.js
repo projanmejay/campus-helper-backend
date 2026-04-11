@@ -28,19 +28,24 @@ router.get("/canteens", async (req, res) => {
 router.get("/:canteenId", async (req, res) => {
   try {
     const { canteenId } = req.params;
-    const items = await MenuItem.find({ canteenId }).sort({ category: 1, name: 1 });
+    // Sort by sectionOrder then itemOrder
+    const items = await MenuItem.find({ canteenId }).sort({ sectionOrder: 1, itemOrder: 1, name: 1 });
 
     // Group items by category to match the frontend 'sections' structure
+    // We must maintain the order of categories as they appear in the sorted items list
+    const sections = [];
     const sectionsMap = {};
+
     items.forEach(item => {
       const cat = item.category || "General";
       if (!sectionsMap[cat]) {
-        sectionsMap[cat] = { title: cat, items: [] };
+        sectionsMap[cat] = { title: cat, items: [], sectionOrder: item.sectionOrder };
+        sections.push(sectionsMap[cat]);
       }
       sectionsMap[cat].items.push(item);
     });
 
-    res.json({ sections: Object.values(sectionsMap) });
+    res.json({ sections });
   } catch (err) {
     console.error("GET MENU ERROR:", err);
     res.status(500).json({ error: "Server error" });
@@ -48,27 +53,38 @@ router.get("/:canteenId", async (req, res) => {
 });
 
 /**
- * @route PATCH /menu/canteen/:canteenId/status
- * @desc  Toggle open/closed status (Admin)
+ * @route PUT /menu/:canteenId/reorder
+ * @desc  Bulk update reorder for items/sections (Admin)
  */
-router.patch("/canteen/:canteenId/status", async (req, res) => {
+router.put("/:canteenId/reorder", async (req, res) => {
   try {
-    const { status } = req.body;
-    if (!["Open", "Closed"].includes(status)) {
-      return res.status(400).json({ error: "Invalid status" });
+    const { canteenId } = req.params;
+    const { updates } = req.body; // Array of { mongoId (optional), category (optional), sectionOrder, itemOrder, id (slug ID) }
+
+    if (!Array.isArray(updates)) {
+      return res.status(400).json({ error: "updates array is required" });
     }
 
-    const canteen = await Canteen.findOneAndUpdate(
-      { canteenId: req.params.canteenId },
-      { status },
-      { new: true }
-    );
+    const bulkOps = updates.map(update => {
+      const filter = update.mongoId ? { _id: update.mongoId } : { canteenId, id: update.id };
+      const updateFields = {};
+      if (update.sectionOrder !== undefined) updateFields.sectionOrder = update.sectionOrder;
+      if (update.itemOrder !== undefined) updateFields.itemOrder = update.itemOrder;
+      if (update.category !== undefined) updateFields.category = update.category;
 
-    if (!canteen) return res.status(404).json({ error: "Canteen not found" });
+      return {
+        updateOne: {
+          filter,
+          update: { $set: updateFields }
+        }
+      };
+    });
 
-    res.json({ success: true, status: canteen.status });
+    await MenuItem.bulkWrite(bulkOps);
+
+    res.json({ success: true });
   } catch (err) {
-    console.error("UPDATE CANTEEN STATUS ERROR:", err);
+    console.error("REORDER BULK ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
@@ -86,21 +102,27 @@ router.post("/:canteenId", async (req, res) => {
       return res.status(400).json({ error: "category, name, price, and id are required" });
     }
 
+    // Find the current max itemOrder in this category to append to the end
+    const lastItem = await MenuItem.findOne({ canteenId, category }).sort({ itemOrder: -1 });
+    const nextItemOrder = lastItem ? lastItem.itemOrder + 1 : 0;
+
+    // Find the sectionOrder for this category if it exists
+    const someItemInCat = await MenuItem.findOne({ canteenId, category });
+    const sectionOrder = someItemInCat ? someItemInCat.sectionOrder : 0;
+
     // Ensure Canteen exists
     let canteen = await Canteen.findOne({ canteenId });
     if (!canteen) {
-      // Create a default canteen entry if it doesn't exist
-      // In a real app, this would be more detailed
       canteen = await Canteen.create({
         canteenId,
-        name: canteenId.replace("_", " ").toUpperCase(), // Fallback name
+        name: canteenId.replace("_", " ").toUpperCase(),
       });
     }
 
     // Upsert the menu item
     let item = await MenuItem.findOneAndUpdate(
       { canteenId, id },
-      { category, name, price, isVeg },
+      { category, name, price, isVeg, itemOrder: nextItemOrder, sectionOrder },
       { upsert: true, new: true }
     );
 
