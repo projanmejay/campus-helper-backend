@@ -5,7 +5,7 @@ const BusLocation = require('../models/BusLocation');
 // POST /location (from Driver App)
 router.post('/location', async (req, res) => {
   try {
-    const { routeId, lat, lng, speed } = req.body;
+    const { routeId, lat, lng, speed, heading } = req.body;
 
     if (!routeId || lat == null || lng == null) {
       return res.status(400).json({ error: 'Missing required fields: routeId, lat, lng' });
@@ -19,6 +19,7 @@ router.post('/location', async (req, res) => {
         lat: parseFloat(lat), 
         lng: parseFloat(lng), 
         speed: speed ? parseFloat(speed) : 0,
+        heading: heading ? parseFloat(heading) : 0,
         lastUpdated: new Date() 
       },
       { new: true, upsert: true }

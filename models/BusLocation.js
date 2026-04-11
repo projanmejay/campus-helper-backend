@@ -18,6 +18,10 @@ const busLocationSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  heading: { 
+    type: Number, 
+    default: 0 // Orientation in degrees (0-360)
+  },
   lastUpdated: { 
     type: Date, 
     default: Date.now 
