@@ -22,6 +22,26 @@ router.get("/canteens", async (req, res) => {
 });
 
 /**
+ * @route PATCH /menu/canteen/:canteenId/status
+ * @desc  Update canteen status (Admin)
+ */
+router.patch("/canteen/:canteenId/status", async (req, res) => {
+  try {
+    const { status } = req.body;
+    let canteen = await Canteen.findOneAndUpdate(
+      { canteenId: req.params.canteenId },
+      { status },
+      { new: true }
+    );
+    if (!canteen) return res.status(404).json({ error: "Canteen not found" });
+    res.json({ success: true, canteen });
+  } catch (err) {
+    console.error("UPDATE CANTEEN STATUS ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
  * @route GET /menu/:canteenId
  * @desc  Fetch menu for a specific canteen, organized by categories
  */
