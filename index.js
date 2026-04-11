@@ -28,12 +28,14 @@ app.use(cors());
 app.use(
   express.json({
     verify: (req, res, buf) => {
-      if (req.originalUrl.includes("/razorpay/webhook")) {
+      if (req.originalUrl && req.originalUrl.includes("/razorpay/webhook")) {
         req.rawBody = buf;
       }
     },
   })
 );
+app.use(express.urlencoded({ extended: true })); // Correctly handle form-data from transmitter app
+
 
 /* ------------------ ENV CHECKS ------------------ */
 
