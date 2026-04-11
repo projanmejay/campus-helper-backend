@@ -29,12 +29,26 @@ function soloExtra(to)      { return Math.ceil((FARE[to] || 0) / 2); }
 // ─────────────────────────────────────────────────────────────────────────────
 // Razorpay
 // ─────────────────────────────────────────────────────────────────────────────
-const razorpay = new Razorpay({
-  key_id:     process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+let razorpay = null;
+try {
+  if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+    razorpay = new Razorpay({
+      key_id:     process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+    console.log("✅ Razorpay initialized");
+  } else {
+    console.warn("⚠️  Razorpay keys missing — ride payments will fail");
+  }
+} catch (e) {
+  console.error("❌ Razorpay init failed:", e.message);
+}
 
 async function createRzpOrder(amountRs, receipt) {
+  if (!razorpay) {
+    console.warn("💰 MOCK: Creating mock Razorpay order for Rs.", amountRs);
+    return { id: `order_mock_${uuidv4().slice(0,8)}`, amount: amountRs * 100, currency: "INR" };
+  }
   return razorpay.orders.create({
     amount:   amountRs * 100, // paise
     currency: "INR",
