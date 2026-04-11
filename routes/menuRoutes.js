@@ -135,14 +135,17 @@ router.post("/:canteenId", async (req, res) => {
 
 /**
  * @route PATCH /menu/item/:mongoId
- * @desc  Update item (price, availability) (Admin)
+ * @desc  Update item (name, price, isVeg, availability, category) (Admin)
  */
 router.patch("/item/:mongoId", async (req, res) => {
   try {
-    const { price, isAvailable } = req.body;
+    const { name, price, isVeg, isAvailable, category } = req.body;
     const updateData = {};
+    if (name !== undefined) updateData.name = name;
     if (price !== undefined) updateData.price = price;
+    if (isVeg !== undefined) updateData.isVeg = isVeg;
     if (isAvailable !== undefined) updateData.isAvailable = isAvailable;
+    if (category !== undefined) updateData.category = category;
 
     const item = await MenuItem.findByIdAndUpdate(
       req.params.mongoId,
@@ -155,6 +158,21 @@ router.patch("/item/:mongoId", async (req, res) => {
     res.json({ success: true, item });
   } catch (err) {
     console.error("UPDATE MENU ITEM ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
+ * @route DELETE /menu/item/:mongoId
+ * @desc  Delete menu item (Admin)
+ */
+router.delete("/item/:mongoId", async (req, res) => {
+  try {
+    const item = await MenuItem.findByIdAndDelete(req.params.mongoId);
+    if (!item) return res.status(404).json({ error: "Item not found" });
+    res.json({ success: true, message: "Item deleted" });
+  } catch (err) {
+    console.error("DELETE MENU ITEM ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
