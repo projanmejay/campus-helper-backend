@@ -19,6 +19,11 @@ const User  = require("./models/User");
 const Otp   = require("./models/otp");
 const Order = require("./models/order");
 const MenuItem = require("./models/MenuItem");
+const Canteen  = require("./models/Canteen");
+
+const generateVerificationCode = () => {
+  return Math.floor(1000 + Math.random() * 9000).toString();
+};
 
 const app = express();
 
@@ -341,6 +346,8 @@ app.post("/order", async (req, res) => {
       orderId:          uuidv4(),
       canteen,
       canteenId:        canteenId || null,
+      pickupCode:       generateVerificationCode(),
+      deliveryCode:     generateVerificationCode(),
       items,
       totalAmount,
       amount:           totalAmount,

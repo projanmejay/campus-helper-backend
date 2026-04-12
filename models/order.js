@@ -12,6 +12,8 @@ const orderSchema = new mongoose.Schema(
     orderType:        { type: String, default: "Takeaway" },
     deliveryLocation: { type: String, default: null },
     deliveryDetails:  { type: String, default: null },
+    pickupCode:       { type: String, default: null },
+    deliveryCode:     { type: String, default: null },
 
     // ─── Payment status ───
     status:           { type: String, default: "PENDING_PAYMENT" },
