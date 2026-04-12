@@ -39,6 +39,9 @@ const orderSchema = new mongoose.Schema(
     // 📝 User Instructions (replaces deliveryDetails usage)
     instructions:      { type: String, default: null },
     
+    // ❌ Cancellation Tracking
+    cancellationReason: { type: String, default: null },
+
     // ⭐ Rating Tracking (Stores item IDs/Names that have been rated from this order)
     ratedItems:        { type: [String], default: [] },
   },

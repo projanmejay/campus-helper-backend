@@ -475,7 +475,7 @@ app.get("/order/:orderId/status", async (req, res) => {
 */
 app.patch("/order/:orderId/status", async (req, res) => {
   try {
-    const { status, estimatedPrepTime } = req.body;
+    const { status, estimatedPrepTime, cancellationReason } = req.body;
     const validStatuses = [
       "PLACED", "PREPARING", "READY",
       "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED",
@@ -496,6 +496,11 @@ app.patch("/order/:orderId/status", async (req, res) => {
       if (estimatedPrepTime) {
         updateData.estimatedPrepTime = Number(estimatedPrepTime);
       }
+    }
+
+    // Cancellation logic
+    if (status === "CANCELLED" && cancellationReason) {
+      updateData.cancellationReason = cancellationReason;
     }
 
     const order = await Order.findOneAndUpdate(
