@@ -93,6 +93,28 @@ router.get("/:canteenId", async (req, res) => {
 });
 
 /**
+ * @route PATCH /menu/:canteenId/category/availability
+ * @desc  Bulk update availability for an entire category (Admin)
+ */
+router.patch("/:canteenId/category/availability", async (req, res) => {
+  try {
+    const { canteenId } = req.params;
+    const { category, isAvailable } = req.body;
+
+    if (!category || isAvailable === undefined) {
+      return res.status(400).json({ error: "category and isAvailable are required" });
+    }
+
+    await MenuItem.updateMany({ canteenId, category }, { isAvailable });
+
+    res.json({ success: true, message: `Category '${category}' availability updated.` });
+  } catch (err) {
+    console.error("CATEGORY BULK AVAILABILITY ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/**
  * @route PUT /menu/:canteenId/reorder
  * @desc  Bulk update reorder for items/sections (Admin)
  */

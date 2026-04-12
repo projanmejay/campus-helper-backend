@@ -14,6 +14,7 @@ const { Resend }    = require("resend");
 const discussionRoutes = require("./routes/discussionRoutes");
 const rideRequestRoutes = require("./routes/rideRequestRoutes");
 const busRoutes = require("./routes/busRoutes");
+const riderLocationRoutes = require("./routes/riderLocationRoutes");
 const menuRoutes = require("./routes/menuRoutes");
 const User  = require("./models/User");
 const Otp   = require("./models/otp");
@@ -69,6 +70,7 @@ mongoose.connect(process.env.MONGO_URI)
 app.use("/discussion", discussionRoutes);
 app.use("/ride-requests", rideRequestRoutes);
 app.use("/bus", busRoutes);
+app.use("/rider", riderLocationRoutes);
 app.use("/menu", menuRoutes);
 /* ------------------ SERVICES ------------------ */
 
