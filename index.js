@@ -328,7 +328,7 @@ app.post("/auth/update", async (req, res) => {
 app.post("/order", async (req, res) => {
   try {
     const {
-      canteen, items, totalAmount, orderType,
+      canteen, canteenId, items, totalAmount, orderType,
       deliveryLocation, deliveryDetails,
       userId, userName, userEmail, userHall,
     } = req.body;
@@ -340,6 +340,7 @@ app.post("/order", async (req, res) => {
     const order = await Order.create({
       orderId:          uuidv4(),
       canteen,
+      canteenId:        canteenId || null,
       items,
       totalAmount,
       amount:           totalAmount,

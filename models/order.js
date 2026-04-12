@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const orderSchema = new mongoose.Schema(
   {
     orderId:          { type: String, required: true, unique: true },
-    canteen:          { type: String },
+    canteen:          { type: String },          // Display Name (for student history)
+    canteenId:        { type: String },          // Unique ID (for admin/rider filtering)
     items:            { type: Object },
     totalAmount:      { type: Number },
     amount:           { type: Number },          // used by razorpay (paise calc)
