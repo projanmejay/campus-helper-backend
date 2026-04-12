@@ -14,6 +14,8 @@ const orderSchema = new mongoose.Schema(
     deliveryDetails:  { type: String, default: null },
     pickupCode:       { type: String, default: null },
     deliveryCode:     { type: String, default: null },
+    riderPhone:       { type: String, default: null },
+    canteenPhone:     { type: String, default: null },
 
     // ─── Payment status ───
     status:           { type: String, default: "PENDING_PAYMENT" },

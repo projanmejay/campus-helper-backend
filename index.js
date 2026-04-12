@@ -365,6 +365,15 @@ app.post("/order", async (req, res) => {
       userPhone:        req.body.userPhone || null,
     });
 
+    // Capture Canteen Phone if available
+    if (canteenId) {
+      const canteenDoc = await Canteen.findOne({ canteenId });
+      if (canteenDoc && canteenDoc.phone) {
+        order.canteenPhone = canteenDoc.phone;
+        await order.save();
+      }
+    }
+
     res.status(201).json({ success: true, orderId: order.orderId });
 
   } catch (err) {
@@ -483,7 +492,7 @@ app.get("/order/:orderId/status", async (req, res) => {
 */
 app.patch("/order/:orderId/status", async (req, res) => {
   try {
-    const { status, estimatedPrepTime, cancellationReason } = req.body;
+    const { status, estimatedPrepTime, cancellationReason, riderPhone } = req.body;
     const validStatuses = [
       "PLACED", "PREPARING", "READY",
       "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED",
@@ -497,6 +506,7 @@ app.patch("/order/:orderId/status", async (req, res) => {
     }
 
     const updateData = { orderStatus: status };
+    if (riderPhone) updateData.riderPhone = riderPhone;
     
     // If moving to PREPARING, set timer stuff
     if (status === "PREPARING") {
@@ -601,6 +611,43 @@ app.post("/orders/:orderId/rate", async (req, res) => {
 
   } catch (err) {
     console.error("RATE ITEM ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* --- Canteen Profile Info --- */
+app.get("/menu/canteen/:canteenId", async (req, res) => {
+  try {
+    const canteen = await Canteen.findOne({ canteenId: req.params.canteenId });
+    if (!canteen) return res.status(404).json({ error: "Canteen not found" });
+    res.json(canteen);
+  } catch (err) {
+    console.error("GET CANTEEN ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.patch("/menu/canteen/:canteenId/phone", async (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: "phone is required" });
+
+    const canteen = await Canteen.findOneAndUpdate(
+      { canteenId: req.params.canteenId },
+      { phone },
+      { new: true }
+    );
+    if (!canteen) return res.status(404).json({ error: "Canteen not found" });
+
+    // Also update all active orders for this canteen so students see the new number
+    await Order.updateMany(
+      { canteenId: req.params.canteenId, orderStatus: { $in: ["PLACED", "PREPARING", "READY"] } },
+      { canteenPhone: phone }
+    );
+
+    res.json({ success: true, phone: canteen.phone });
+  } catch (err) {
+    console.error("UPDATE CANTEEN PHONE ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });

@@ -5,6 +5,7 @@ const canteenSchema = new mongoose.Schema({
   name: { type: String, required: true },
   status: { type: String, enum: ["Open", "Closed"], default: "Open" },
   packagingFee: { type: Number, default: 0 },
+  phone: { type: String, default: "" },
   ratingSum: { type: Number, default: 0 },
   ratingCount: { type: Number, default: 0 },
 }, { timestamps: true });
