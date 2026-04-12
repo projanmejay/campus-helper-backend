@@ -7,7 +7,7 @@ const User = require("../models/User");
 
 router.post("/create", async (req, res) => {
   try {
-    const { title, description, email, category } = req.body;
+    const { title, description, email, category, authorRealName, phoneNumber, imageUrl } = req.body;
 
     const user = await User.findOne({ email });
 
@@ -24,6 +24,9 @@ router.post("/create", async (req, res) => {
       author: user.username,
       authorEmail: email,
       category,
+      authorRealName: authorRealName || user.name, // fallback to registered name
+      phoneNumber,
+      imageUrl,
     });
 
     await post.save();

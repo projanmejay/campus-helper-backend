@@ -49,6 +49,15 @@ const discussionSchema = new mongoose.Schema(
       type:     String,
       required: true,
     },
+    authorRealName: {
+      type: String,
+    },
+    phoneNumber: {
+      type: String,
+    },
+    imageUrl: {
+      type: String,
+    },
     category: {
       type:    String,
       default: "General",
