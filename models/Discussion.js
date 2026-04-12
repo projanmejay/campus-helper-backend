@@ -63,6 +63,13 @@ const discussionSchema = new mongoose.Schema(
       },
     ],
     comments: [commentSchema],
+    reports: [
+      {
+        email: String,
+        reason: String,
+        createdAt: { type: Date, default: Date.now }
+      }
+    ],
   },
   { timestamps: true }
 );

@@ -339,4 +339,19 @@ router.post("/increment-views/:id", async (req, res) => {
   }
 });
 
+/* ================= REPORT POST ================= */
+router.post("/report/:id", async (req, res) => {
+  try {
+    const { email, reason } = req.body;
+    const post = await Discussion.findById(req.params.id);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    post.reports.push({ email, reason });
+    await post.save();
+    res.json({ success: true, message: "Report submitted" });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
