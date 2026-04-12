@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const replySchema = new mongoose.Schema({
   user:      { type: String },
   comment:   { type: String },
+  authorEmail: { type: String },
   upvotes:   { type: Number, default: 0 },
   downvotes: { type: Number, default: 0 },
   votes: [
@@ -17,6 +18,7 @@ const replySchema = new mongoose.Schema({
 const commentSchema = new mongoose.Schema({
   user:      { type: String },
   comment:   { type: String },
+  authorEmail: { type: String },
   upvotes:   { type: Number, default: 0 },
   downvotes: { type: Number, default: 0 },
   votes: [
@@ -40,6 +42,10 @@ const discussionSchema = new mongoose.Schema(
       required: true,
     },
     author: {
+      type:     String,
+      required: true,
+    },
+    authorEmail: {
       type:     String,
       required: true,
     },
