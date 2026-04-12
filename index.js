@@ -601,6 +601,14 @@ app.post("/orders/:orderId/rate", async (req, res) => {
       await menuItem.save();
     }
 
+    // Also update Canteen rating
+    const canteen = await Canteen.findOne({ canteenId });
+    if (canteen) {
+      canteen.ratingSum += score;
+      canteen.ratingCount += 1;
+      await canteen.save();
+    }
+
     // Track that this item has been rated
     await Order.findOneAndUpdate(
       { orderId },
