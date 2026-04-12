@@ -324,4 +324,19 @@ router.post("/delete-reply", async (req, res) => {
   }
 });
 
+/* ================= INCREMENT VIEWS ================= */
+router.post("/increment-views/:id", async (req, res) => {
+  try {
+    const post = await Discussion.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { views: 1 } },
+      { new: true }
+    );
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+    res.json({ success: true, views: post.views });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;

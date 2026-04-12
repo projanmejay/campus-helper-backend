@@ -55,6 +55,7 @@ const discussionSchema = new mongoose.Schema(
     },
     upvotes:   { type: Number, default: 0 },
     downvotes: { type: Number, default: 0 },
+    views:     { type: Number, default: 0 },
     votes: [
       {
         email: String,
