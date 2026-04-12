@@ -585,7 +585,7 @@ app.post("/orders/:orderId/rate", async (req, res) => {
       return res.status(400).json({ error: "Item already rated" });
     }
 
-    // Find the MenuItem by name and canteen
+    // Use stored canteenId if available, fallback to mapping
     const canteenMapping = {
       'AZAD Canteen': 'azad_hall',
       'LLR Canteen': 'llr_canteen',
@@ -594,21 +594,29 @@ app.post("/orders/:orderId/rate", async (req, res) => {
       'RK Canteen': 'rk_hall',
       'RP Canteen': 'rp_canteen',
     };
-    const canteenId = canteenMapping[order.canteen] || order.canteen;
+    const canteenId = order.canteenId || canteenMapping[order.canteen] || order.canteen;
+
+    console.log(`Rating: orderId=${orderId}, canteenId=${canteenId}, item=${itemName}, score=${score}`);
 
     const menuItem = await MenuItem.findOne({ canteenId, name: itemName });
     if (menuItem) {
-      menuItem.ratingSum += score;
+      menuItem.ratingSum += Number(score);
       menuItem.ratingCount += 1;
       await menuItem.save();
+      console.log(`Updated MenuItem: ${itemName}, Count: ${menuItem.ratingCount}, Sum: ${menuItem.ratingSum}`);
+    } else {
+      console.warn(`MenuItem not found for rating: canteenId=${canteenId}, name=${itemName}`);
     }
 
     // Also update Canteen rating
     const canteen = await Canteen.findOne({ canteenId });
     if (canteen) {
-      canteen.ratingSum += score;
+      canteen.ratingSum += Number(score);
       canteen.ratingCount += 1;
       await canteen.save();
+      console.log(`Updated Canteen: ${canteenId}, Count: ${canteen.ratingCount}, Sum: ${canteen.ratingSum}`);
+    } else {
+      console.warn(`Canteen not found for rating: canteenId=${canteenId}`);
     }
 
     // Track that this item has been rated
