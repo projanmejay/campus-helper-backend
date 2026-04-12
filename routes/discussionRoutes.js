@@ -354,4 +354,42 @@ router.post("/report/:id", async (req, res) => {
   }
 });
 
+/* ================= ADMIN: GET ALL REPORTS ================= */
+router.get("/admin/reports", async (req, res) => {
+  try {
+    // Return all posts that have at least one report
+    const reportedPosts = await Discussion.find({ "reports.0": { $exists: true } }).sort({ updatedAt: -1 });
+    res.json({ success: true, reports: reportedPosts });
+  } catch (error) {
+    console.error("ADMIN GET REPORTS ERROR:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/* ================= ADMIN: RESOLVE (CLEAR) REPORTS ================= */
+router.post("/admin/resolve-report/:id", async (req, res) => {
+  try {
+    const post = await Discussion.findByIdAndUpdate(
+      req.params.id,
+      { $set: { reports: [] } },
+      { new: true }
+    );
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+    res.json({ success: true, message: "Reports cleared" });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/* ================= ADMIN: MASTER DELETE POST ================= */
+router.post("/admin/delete-post/:id", async (req, res) => {
+  try {
+    const post = await Discussion.findByIdAndDelete(req.params.id);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+    res.json({ success: true, message: "Post removed by Admin" });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
