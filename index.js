@@ -6,6 +6,7 @@ const mongoose   = require("mongoose");
 const bcrypt     = require("bcrypt");
 const crypto     = require("crypto");
 const { v4: uuidv4 } = require("uuid");
+const cron = require("node-cron");
 
 const Razorpay      = require("razorpay");
 const otpGenerator  = require("otp-generator");
@@ -16,6 +17,7 @@ const rideRequestRoutes = require("./routes/rideRequestRoutes");
 const busRoutes = require("./routes/busRoutes");
 const riderLocationRoutes = require("./routes/riderLocationRoutes");
 const menuRoutes = require("./routes/menuRoutes");
+const taxiSharingRoutes = require("./routes/taxiSharingRoutes");
 const User  = require("./models/User");
 const Otp   = require("./models/otp");
 const Order = require("./models/order");
@@ -76,6 +78,7 @@ app.use("/ride-requests", rideRequestRoutes);
 app.use("/bus", busRoutes);
 app.use("/rider", riderLocationRoutes);
 app.use("/menu", menuRoutes);
+app.use("/taxi-sharing", taxiSharingRoutes);
 /* ------------------ SERVICES ------------------ */
 
 const razorpay = new Razorpay({
@@ -933,4 +936,68 @@ app.listen(PORT, () => {
   console.log(`📧 EMAIL_FROM      : ${process.env.EMAIL_FROM      || "NOT SET ❌"}`);
   console.log(`🔑 RESEND_API_KEY  : ${process.env.RESEND_API_KEY  ? "set ✅" : "NOT SET ❌"}`);
   console.log(`💳 RAZORPAY_KEY_ID : ${process.env.RAZORPAY_KEY_ID ? "set ✅" : "NOT SET ❌"}`);
+});
+
+/* ------------------ CRON JOBS (Taxi Notifications) ------------------ */
+
+let messaging = null;
+try {
+  const admin = require("firebase-admin");
+  if (!admin.apps.length) {
+    admin.initializeApp({
+      credential: admin.credential.cert(require("./serviceAccountKey.json")),
+    });
+  }
+  messaging = admin.messaging();
+  console.log("✅ Firebase Admin initialized for Cron Jobs");
+} catch (e) {
+  console.warn("⚠️ Firebase Admin initialization failed for Cron:", e.message);
+}
+
+const RideGroup = require("./models/RideGroup");
+const TravelRequest = require("./models/TravelRequest");
+
+// Check every hour for rides departing in < 24 hours
+cron.schedule("0 * * * *", async () => {
+  console.log("🕙 Running 24h Taxi Notification Cron...");
+  try {
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    // Find groups departing in next 24h that haven't been notified
+    const groups = await RideGroup.find({
+      departureTime: { $lte: tomorrow, $gt: now },
+      isNotified: false,
+    });
+
+    console.log(`  Found ${groups.length} groups to notify`);
+
+    for (const group of groups) {
+      const requests = await TravelRequest.find({ _id: { $in: group.requestIds } });
+
+      for (const req of requests) {
+        if (req.fcmToken && messaging) {
+          try {
+            await messaging.send({
+              token: req.fcmToken,
+              notification: {
+                title: "🚖 Taxi Reminder",
+                body: `Your ride to ${group.destination} is scheduled for tomorrow at ${req.time}. Driver: ${group.ownerName}`,
+              },
+              android: { priority: "high" },
+            });
+          } catch (err) {
+            console.error(`  FCM failed for request ${req._id}:`, err.message);
+          }
+        }
+      }
+
+      // Mark group as notified
+      group.isNotified = true;
+      await group.save();
+    }
+    console.log("✅ Taxi Notification Cron complete");
+  } catch (err) {
+    console.error("❌ Taxi Notification Cron error:", err);
+  }
 });
