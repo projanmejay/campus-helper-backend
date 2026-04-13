@@ -22,6 +22,7 @@ const Order = require("./models/order");
 const MenuItem = require("./models/MenuItem");
 const Canteen  = require("./models/Canteen");
 const Config   = require("./models/Config");
+const Event    = require("./models/Event");
 
 const generateVerificationCode = () => {
   return Math.floor(1000 + Math.random() * 9000).toString();
@@ -814,6 +815,41 @@ app.patch("/config", async (req, res) => {
     res.json({ success: true, config });
   } catch (err) {
     console.error("UPDATE CONFIG ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* ------------------ EVENTS ------------------ */
+
+app.get("/events", async (req, res) => {
+  try {
+    const events = await Event.find().sort({ createdAt: -1 });
+    res.json(events);
+  } catch (err) {
+    console.error("GET EVENTS ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/events", async (req, res) => {
+  try {
+    const { title, date, description, color, icon, links } = req.body;
+    if (!title || !date) return res.status(400).json({ error: "title and date are required" });
+
+    const newEvent = await Event.create({ title, date, description, color, icon, links });
+    res.status(201).json({ success: true, event: newEvent });
+  } catch (err) {
+    console.error("CREATE EVENT ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.delete("/events/:id", async (req, res) => {
+  try {
+    await Event.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("DELETE EVENT ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
