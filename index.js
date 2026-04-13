@@ -337,6 +337,7 @@ app.post("/order", async (req, res) => {
   try {
     const {
       canteen, canteenId, items, totalAmount, orderType,
+      packagingFee, platformFee, deliveryFee, amount,
       deliveryLocation, deliveryDetails,
       userId, userName, userEmail, userHall,
     } = req.body;
@@ -353,7 +354,10 @@ app.post("/order", async (req, res) => {
       deliveryCode:     generateVerificationCode(),
       items,
       totalAmount,
-      amount:           totalAmount,
+      packagingFee:     packagingFee || 0,
+      platformFee:      platformFee  || 0,
+      deliveryFee:      deliveryFee  || 0,
+      amount:           amount || totalAmount, // fallback to totalAmount for old versions
       currency:         "INR",
       orderType:        orderType        || "Takeaway",
       deliveryLocation: deliveryLocation || null,
