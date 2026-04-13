@@ -825,10 +825,30 @@ app.patch("/config", async (req, res) => {
 
 app.get("/events", async (req, res) => {
   try {
-    const events = await Event.find().sort({ createdAt: -1 });
+    const events = await Event.find().sort({ order: 1, createdAt: -1 });
     res.json(events);
   } catch (err) {
     console.error("GET EVENTS ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.post("/events/reorder", async (req, res) => {
+  try {
+    const { orders } = req.body; // Expecting [{ id, order }, ...]
+    if (!orders || !Array.isArray(orders)) return res.status(400).json({ error: "Orders array required" });
+
+    const bulkOps = orders.map(item => ({
+      updateOne: {
+        filter: { _id: item.id },
+        update: { $set: { order: item.order } }
+      }
+    }));
+
+    await Event.bulkWrite(bulkOps);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("REORDER ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });

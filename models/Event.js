@@ -13,6 +13,7 @@ const eventSchema = new mongoose.Schema({
   color: { type: String, default: "0xFF6366F1" }, 
   icon: { type: String, default: "event" }, 
   links: [linkSchema],
+  order: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 });
 
