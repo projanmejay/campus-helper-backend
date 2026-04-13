@@ -854,6 +854,37 @@ app.delete("/events/:id", async (req, res) => {
   }
 });
 
+/* ------------------ IMAGE UPLOAD ------------------ */
+
+const uploadedImages = new Map(); // In-memory store (use MongoDB for persistence)
+
+app.post("/upload-image", async (req, res) => {
+  try {
+    const { base64 } = req.body;
+    if (!base64) return res.status(400).json({ error: "base64 field is required" });
+
+    const id = uuidv4().substring(0, 12);
+    uploadedImages.set(id, base64);
+
+    const host = req.protocol + "://" + req.get("host");
+    const url = `${host}/images/${id}`;
+    res.status(201).json({ success: true, url });
+  } catch (err) {
+    console.error("UPLOAD IMAGE ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.get("/images/:id", (req, res) => {
+  const data = uploadedImages.get(req.params.id);
+  if (!data) return res.status(404).send("Not found");
+
+  const buffer = Buffer.from(data, "base64");
+  res.set("Content-Type", "image/jpeg");
+  res.set("Cache-Control", "public, max-age=31536000");
+  res.send(buffer);
+});
+
 /* ------------------ HEALTH ------------------ */
 
 app.get("/health", (req, res) => res.send("OK"));
