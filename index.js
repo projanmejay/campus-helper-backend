@@ -846,6 +846,16 @@ app.post("/events", async (req, res) => {
   }
 });
 
+app.put("/events/:id", async (req, res) => {
+  try {
+    const updated = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json({ success: true, event: updated });
+  } catch (err) {
+    console.error("UPDATE EVENT ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.delete("/events/:id", async (req, res) => {
   try {
     await Event.findByIdAndDelete(req.params.id);
