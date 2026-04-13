@@ -7,6 +7,9 @@ const orderSchema = new mongoose.Schema(
     canteenId:        { type: String },          // Unique ID (for admin/rider filtering)
     items:            { type: Object },
     totalAmount:      { type: Number },
+    packagingFee:     { type: Number, default: 0 },
+    platformFee:      { type: Number, default: 0 },
+    deliveryFee:      { type: Number, default: 0 },
     amount:           { type: Number },          // used by razorpay (paise calc)
     currency:         { type: String, default: "INR" },
     orderType:        { type: String, default: "Takeaway" },

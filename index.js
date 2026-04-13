@@ -21,6 +21,7 @@ const Otp   = require("./models/otp");
 const Order = require("./models/order");
 const MenuItem = require("./models/MenuItem");
 const Canteen  = require("./models/Canteen");
+const Config   = require("./models/Config");
 
 const generateVerificationCode = () => {
   return Math.floor(1000 + Math.random() * 9000).toString();
@@ -773,6 +774,42 @@ app.get("/drivers", async (req, res) => {
     res.json(drivers);
   } catch (err) {
     console.error("GET DRIVERS ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* ===================================================== */
+/* ================= CONFIG (FEES) ===================== */
+/* ===================================================== */
+
+app.get("/config", async (req, res) => {
+  try {
+    let config = await Config.findOne({});
+    if (!config) {
+      config = await Config.create({ platformFee: 0, deliveryFee: 0 });
+    }
+    res.json(config);
+  } catch (err) {
+    console.error("GET CONFIG ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+app.patch("/config", async (req, res) => {
+  try {
+    const { platformFee, deliveryFee } = req.body;
+    let config = await Config.findOne({});
+    if (!config) {
+      config = new Config();
+    }
+    if (platformFee !== undefined) config.platformFee = Number(platformFee);
+    if (deliveryFee !== undefined) config.deliveryFee = Number(deliveryFee);
+    config.lastUpdated = new Date();
+    await config.save();
+    
+    res.json({ success: true, config });
+  } catch (err) {
+    console.error("UPDATE CONFIG ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
