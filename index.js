@@ -494,21 +494,23 @@ app.get("/order/:orderId/status", async (req, res) => {
 */
 app.patch("/order/:orderId/status", async (req, res) => {
   try {
-    const { status, estimatedPrepTime, cancellationReason, riderPhone } = req.body;
+    const { status, estimatedPrepTime, cancellationReason, riderPhone, isRefunded } = req.body;
     const validStatuses = [
       "PLACED", "PREPARING", "READY",
       "PICKED_UP", "OUT_FOR_DELIVERY", "DELIVERED",
       "CANCELLED",
     ];
 
-    if (!status || !validStatuses.includes(status)) {
+    if (status && !validStatuses.includes(status)) {
       return res.status(400).json({
         error: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
       });
     }
 
-    const updateData = { orderStatus: status };
+    const updateData = {};
+    if (status) updateData.orderStatus = status;
     if (riderPhone) updateData.riderPhone = riderPhone;
+    if (isRefunded !== undefined) updateData.isRefunded = isRefunded;
     
     // If moving to PREPARING, set timer stuff
     if (status === "PREPARING") {

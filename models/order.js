@@ -46,6 +46,7 @@ const orderSchema = new mongoose.Schema(
     
     // ❌ Cancellation Tracking
     cancellationReason: { type: String, default: null },
+    isRefunded:         { type: Boolean, default: false },
 
     // ⭐ Rating Tracking (Stores item IDs/Names that have been rated from this order)
     ratedItems:        { type: [String], default: [] },
