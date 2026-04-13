@@ -23,6 +23,7 @@ const MenuItem = require("./models/MenuItem");
 const Canteen  = require("./models/Canteen");
 const Config   = require("./models/Config");
 const Event    = require("./models/Event");
+const ImageData = require("./models/ImageData");
 
 const generateVerificationCode = () => {
   return Math.floor(1000 + Math.random() * 9000).toString();
@@ -856,15 +857,14 @@ app.delete("/events/:id", async (req, res) => {
 
 /* ------------------ IMAGE UPLOAD ------------------ */
 
-const uploadedImages = new Map(); // In-memory store (use MongoDB for persistence)
-
 app.post("/upload-image", async (req, res) => {
   try {
     const { base64 } = req.body;
     if (!base64) return res.status(400).json({ error: "base64 field is required" });
 
     const id = uuidv4().substring(0, 12);
-    uploadedImages.set(id, base64);
+    const newImage = new ImageData({ id, base64 });
+    await newImage.save();
 
     const host = req.protocol + "://" + req.get("host");
     const url = `${host}/images/${id}`;
@@ -875,14 +875,18 @@ app.post("/upload-image", async (req, res) => {
   }
 });
 
-app.get("/images/:id", (req, res) => {
-  const data = uploadedImages.get(req.params.id);
-  if (!data) return res.status(404).send("Not found");
+app.get("/images/:id", async (req, res) => {
+  try {
+    const imgData = await ImageData.findOne({ id: req.params.id });
+    if (!imgData) return res.status(404).send("Not found");
 
-  const buffer = Buffer.from(data, "base64");
-  res.set("Content-Type", "image/jpeg");
-  res.set("Cache-Control", "public, max-age=31536000");
-  res.send(buffer);
+    const buffer = Buffer.from(imgData.base64, "base64");
+    res.set("Content-Type", "image/jpeg");
+    res.set("Cache-Control", "public, max-age=31536000");
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).send("Server error");
+  }
 });
 
 /* ------------------ HEALTH ------------------ */
