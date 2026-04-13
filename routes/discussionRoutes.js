@@ -7,7 +7,7 @@ const User = require("../models/User");
 
 router.post("/create", async (req, res) => {
   try {
-    const { title, description, email, category, authorRealName, phoneNumber, imageUrl } = req.body;
+    const { title, description, email, category, authorRealName, phoneNumber, imageUrl, linkUrl } = req.body;
 
     const user = await User.findOne({ email });
 
@@ -27,6 +27,7 @@ router.post("/create", async (req, res) => {
       authorRealName: authorRealName || user.name, // fallback to registered name
       phoneNumber,
       imageUrl,
+      linkUrl,
     });
 
     await post.save();
@@ -105,7 +106,7 @@ router.post("/vote/:id", async (req, res) => {
 
 router.post("/comment", async (req, res) => {
   try {
-    const { postId, email, comment } = req.body;
+    const { postId, email, comment, imageUrl, linkUrl } = req.body;
 
     const user = await User.findOne({ email });
 
@@ -119,7 +120,7 @@ router.post("/comment", async (req, res) => {
       return res.status(404).json({ success: false, message: "Post not found" });
     }
 
-    post.comments.push({ user: user.username, authorEmail: email, comment });
+    post.comments.push({ user: user.username, authorEmail: email, comment, imageUrl, linkUrl });
 
     await post.save();
 
@@ -184,7 +185,7 @@ router.post("/comment/vote", async (req, res) => {
 
 router.post("/reply", async (req, res) => {
   try {
-    const { postId, commentId, email, comment } = req.body;
+    const { postId, commentId, email, comment, imageUrl, linkUrl } = req.body;
 
     const user = await User.findOne({ email });
 
@@ -204,7 +205,7 @@ router.post("/reply", async (req, res) => {
       return res.status(404).json({ success: false, message: "Comment not found" });
     }
 
-    parentComment.replies.push({ user: user.username, authorEmail: email, comment });
+    parentComment.replies.push({ user: user.username, authorEmail: email, comment, imageUrl, linkUrl });
 
     await post.save();
 

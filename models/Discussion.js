@@ -12,6 +12,8 @@ const replySchema = new mongoose.Schema({
       vote:  Number, // 1 = upvote, -1 = downvote
     },
   ],
+  imageUrl: { type: String },
+  linkUrl:  { type: String },
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -27,6 +29,8 @@ const commentSchema = new mongoose.Schema({
       vote:  Number, // 1 = upvote, -1 = downvote
     },
   ],
+  imageUrl: { type: String },
+  linkUrl:  { type: String },
   replies:   [replySchema],
   createdAt: { type: Date, default: Date.now },
 });
@@ -56,6 +60,9 @@ const discussionSchema = new mongoose.Schema(
       type: String,
     },
     imageUrl: {
+      type: String,
+    },
+    linkUrl: {
       type: String,
     },
     category: {
