@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 const linkSchema = new mongoose.Schema({
   label: { type: String, required: true },
-  url: { type: String, required: true }
+  url: { type: String, required: true },
+  isImage: { type: Boolean, default: false }
 }, { _id: false });
 
 const eventSchema = new mongoose.Schema({
