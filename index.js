@@ -38,6 +38,7 @@ app.use(cors());
 // Keep raw body available for Razorpay webhook signature verification
 app.use(
   express.json({
+    limit: '20mb',
     verify: (req, res, buf) => {
       if (req.originalUrl && req.originalUrl.includes("/razorpay/webhook")) {
         req.rawBody = buf;
@@ -45,7 +46,7 @@ app.use(
     },
   })
 );
-app.use(express.urlencoded({ extended: true })); // Correctly handle form-data from transmitter app
+app.use(express.urlencoded({ limit: '20mb', extended: true })); // Correctly handle form-data from transmitter app
 
 
 /* ------------------ ENV CHECKS ------------------ */
