@@ -115,6 +115,22 @@ app.get("/user/check-username", async (req, res) => {
   }
 });
 
+app.get("/user/exists", async (req, res) => {
+  try {
+    const { username } = req.query;
+    if (!username) return res.status(400).json({ error: "username is required" });
+    
+    const user = await User.findOne({ username });
+    if (user) {
+      return res.json({ exists: true });
+    }
+    return res.json({ exists: false });
+  } catch (err) {
+    console.error("USER EXISTS ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 app.post("/user/create-username", async (req, res) => {
   try {
     const { email, username } = req.body;
