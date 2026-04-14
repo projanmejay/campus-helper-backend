@@ -202,7 +202,7 @@ router.post("/comment/vote", async (req, res) => {
 
 router.post("/reply", async (req, res) => {
   try {
-    const { postId, commentId, email, comment, imageUrl, linkUrl } = req.body;
+    const { postId, commentId, replyToId, email, comment, imageUrl, linkUrl } = req.body;
 
     const user = await User.findOne({ email });
 
@@ -222,7 +222,7 @@ router.post("/reply", async (req, res) => {
       return res.status(404).json({ success: false, message: "Comment not found" });
     }
 
-    parentComment.replies.push({ user: user.username, authorEmail: email, comment, imageUrl, linkUrl });
+    parentComment.replies.push({ user: user.username, authorEmail: email, comment, imageUrl, linkUrl, replyToId });
 
     await post.save();
 

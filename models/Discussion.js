@@ -14,6 +14,7 @@ const replySchema = new mongoose.Schema({
   ],
   imageUrl: { type: String },
   linkUrl:  { type: String },
+  replyToId: { type: String, default: null }, // Allows infinite recursive nesting inside a flat array
   createdAt: { type: Date, default: Date.now },
 });
 
