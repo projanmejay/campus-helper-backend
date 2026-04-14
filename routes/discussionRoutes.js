@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Discussion = require("../models/Discussion");
 const User = require("../models/User");
+const Notification = require("../models/Notification");
 
 /* ================= CREATE DISCUSSION POST ================= */
 
@@ -124,6 +125,22 @@ router.post("/comment", async (req, res) => {
 
     await post.save();
 
+    // Notify post author (skip if commenting on own post)
+    if (post.authorEmail !== email) {
+      try {
+        await Notification.create({
+          recipientEmail: post.authorEmail,
+          senderUsername: user.username,
+          type: "comment",
+          postId: post._id,
+          postTitle: post.title,
+          snippet: comment.substring(0, 100),
+        });
+      } catch (notifErr) {
+        console.error("Notification create error (non-fatal):", notifErr.message);
+      }
+    }
+
     res.json({ success: true, post });
 
   } catch (error) {
@@ -208,6 +225,22 @@ router.post("/reply", async (req, res) => {
     parentComment.replies.push({ user: user.username, authorEmail: email, comment, imageUrl, linkUrl });
 
     await post.save();
+
+    // Notify comment author (skip if replying to own comment)
+    if (parentComment.authorEmail !== email) {
+      try {
+        await Notification.create({
+          recipientEmail: parentComment.authorEmail,
+          senderUsername: user.username,
+          type: "reply",
+          postId: post._id,
+          postTitle: post.title,
+          snippet: comment.substring(0, 100),
+        });
+      } catch (notifErr) {
+        console.error("Notification create error (non-fatal):", notifErr.message);
+      }
+    }
 
     res.json({ success: true, post });
 
