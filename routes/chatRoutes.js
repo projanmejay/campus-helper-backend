@@ -54,6 +54,22 @@ router.get("/threads", checkUser, async (req, res) => {
   }
 });
 
+// GET /chat/unread-count?username=...
+// Returns the total number of unread messages across all threads
+router.get("/unread-count", checkUser, async (req, res) => {
+  try {
+    const { username } = req.query;
+    const count = await Message.countDocuments({
+      receiverUsername: username,
+      read: false
+    });
+    res.json({ unreadCount: count });
+  } catch (error) {
+    console.error("GET /chat/unread-count ERROR:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET /chat/:otherUsername?username=...
 // Fetch the entire chronological message history between two users
 router.get("/:otherUsername", checkUser, async (req, res) => {
