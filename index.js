@@ -1,15 +1,15 @@
 require("dotenv").config();
 
-const express    = require("express");
-const cors       = require("cors");
-const mongoose   = require("mongoose");
-const bcrypt     = require("bcrypt");
-const crypto     = require("crypto");
+const express = require("express");
+const cors = require("cors");
+const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
 
-const Razorpay      = require("razorpay");
-const otpGenerator  = require("otp-generator");
-const { Resend }    = require("resend");
+const Razorpay = require("razorpay");
+const otpGenerator = require("otp-generator");
+const { Resend } = require("resend");
 
 const discussionRoutes = require("./routes/discussionRoutes");
 const rideRequestRoutes = require("./routes/rideRequestRoutes");
@@ -18,13 +18,13 @@ const riderLocationRoutes = require("./routes/riderLocationRoutes");
 const menuRoutes = require("./routes/menuRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const chatRoutes = require("./routes/chatRoutes");
-const User  = require("./models/User");
-const Otp   = require("./models/otp");
+const User = require("./models/User");
+const Otp = require("./models/otp");
 const Order = require("./models/order");
 const MenuItem = require("./models/MenuItem");
-const Canteen  = require("./models/Canteen");
-const Config   = require("./models/Config");
-const Event    = require("./models/Event");
+const Canteen = require("./models/Canteen");
+const Config = require("./models/Config");
+const Event = require("./models/Event");
 const ImageData = require("./models/ImageData");
 
 const generateVerificationCode = () => {
@@ -57,10 +57,10 @@ if (!process.env.MONGO_URI) {
   console.error("❌ MONGO_URI missing");
   process.exit(1);
 }
-if (!process.env.RESEND_API_KEY)        console.error("❌ RESEND_API_KEY missing — emails will not be sent");
-if (!process.env.EMAIL_FROM)            console.error("❌ EMAIL_FROM missing — emails will not be sent");
-if (!process.env.RAZORPAY_KEY_ID)       console.error("❌ RAZORPAY_KEY_ID missing");
-if (!process.env.RAZORPAY_KEY_SECRET)   console.error("❌ RAZORPAY_KEY_SECRET missing");
+if (!process.env.RESEND_API_KEY) console.error("❌ RESEND_API_KEY missing — emails will not be sent");
+if (!process.env.EMAIL_FROM) console.error("❌ EMAIL_FROM missing — emails will not be sent");
+if (!process.env.RAZORPAY_KEY_ID) console.error("❌ RAZORPAY_KEY_ID missing");
+if (!process.env.RAZORPAY_KEY_SECRET) console.error("❌ RAZORPAY_KEY_SECRET missing");
 
 /* ------------------ DB ------------------ */
 
@@ -83,7 +83,7 @@ app.use("/chat", chatRoutes);
 /* ------------------ SERVICES ------------------ */
 
 const razorpay = new Razorpay({
-  key_id:     process.env.RAZORPAY_KEY_ID,
+  key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
@@ -119,7 +119,7 @@ app.get("/user/exists", async (req, res) => {
   try {
     const { username } = req.query;
     if (!username) return res.status(400).json({ error: "username is required" });
-    
+
     const user = await User.findOne({ username });
     if (user) {
       return res.json({ exists: true });
@@ -150,7 +150,7 @@ app.post("/user/create-username", async (req, res) => {
       return res.status(400).json({ error: "Username already confirmed and cannot be changed" });
     }
 
-    user.username          = username.trim();
+    user.username = username.trim();
     user.usernameConfirmed = true;
     await user.save();
 
@@ -183,10 +183,10 @@ app.post("/auth/register", async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
 
     const otp = otpGenerator.generate(6, {
-      digits:             true,
+      digits: true,
       upperCaseAlphabets: false,
       lowerCaseAlphabets: false,
-      specialChars:       false,
+      specialChars: false,
     });
 
     await Otp.deleteMany({ email });
@@ -203,8 +203,8 @@ app.post("/auth/register", async (req, res) => {
     console.log("📨 Sending OTP to:", email, "| FROM:", process.env.EMAIL_FROM);
 
     const { data, error } = await resend.emails.send({
-      from:    process.env.EMAIL_FROM,
-      to:      email,
+      from: process.env.EMAIL_FROM,
+      to: email,
       subject: "Campus Helper — OTP Verification",
       html: `
         <h3>Campus Helper Registration</h3>
@@ -251,9 +251,9 @@ app.post("/auth/verify-otp", async (req, res) => {
     }
 
     const user = await User.create({
-      name:     record.name,
-      hall:     record.hall,
-      email:    record.email,
+      name: record.name,
+      hall: record.hall,
+      email: record.email,
       password: record.password,
       verified: true,
     });
@@ -266,11 +266,11 @@ app.post("/auth/verify-otp", async (req, res) => {
       success: true,
       message: "Account created successfully",
       user: {
-        id:    user._id,
-        name:  user.name,
-        hall:  user.hall,
+        id: user._id,
+        name: user.name,
+        hall: user.hall,
         email: user.email,
-        hall:  user.hall,
+        hall: user.hall,
         phone: user.phone || '',
       },
     });
@@ -300,11 +300,11 @@ app.post("/auth/login", async (req, res) => {
       success: true,
       message: "Login successful",
       user: {
-        id:       user._id,
-        name:     user.name,
-        email:    user.email,
-        hall:     user.hall,
-        phone:    user.phone || '',
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        hall: user.hall,
+        phone: user.phone || '',
         username: user.username || null,
       },
     });
@@ -370,29 +370,29 @@ app.post("/order", async (req, res) => {
     }
 
     const order = await Order.create({
-      orderId:          uuidv4(),
+      orderId: uuidv4(),
       canteen,
-      canteenId:        canteenId || null,
-      pickupCode:       generateVerificationCode(),
-      deliveryCode:     generateVerificationCode(),
+      canteenId: canteenId || null,
+      pickupCode: generateVerificationCode(),
+      deliveryCode: generateVerificationCode(),
       items,
       totalAmount,
-      packagingFee:     packagingFee || 0,
-      platformFee:      platformFee  || 0,
-      deliveryFee:      deliveryFee  || 0,
-      amount:           amount || totalAmount, // fallback to totalAmount for old versions
-      currency:         "INR",
-      orderType:        orderType        || "Takeaway",
+      packagingFee: packagingFee || 0,
+      platformFee: platformFee || 0,
+      deliveryFee: deliveryFee || 0,
+      amount: amount || totalAmount, // fallback to totalAmount for old versions
+      currency: "INR",
+      orderType: orderType || "Takeaway",
       deliveryLocation: deliveryLocation || null,
-      deliveryDetails:  deliveryDetails  || null,
-      instructions:     req.body.instructions || null,
-      status:           "PENDING_PAYMENT",
-      orderStatus:      "PLACED",
-      userId:           userId           || null,
-      userName:         userName         || null,
-      userEmail:        userEmail        || null,
-      userHall:         userHall         || null,
-      userPhone:        req.body.userPhone || null,
+      deliveryDetails: deliveryDetails || null,
+      instructions: req.body.instructions || null,
+      status: "PENDING_PAYMENT",
+      orderStatus: "PLACED",
+      userId: userId || null,
+      userName: userName || null,
+      userEmail: userEmail || null,
+      userHall: userHall || null,
+      userPhone: req.body.userPhone || null,
     });
 
     // Capture Canteen Phone if available
@@ -427,20 +427,20 @@ app.post("/razorpay/create-order", async (req, res) => {
     if (!order) return res.status(404).json({ error: "Order not found" });
 
     const rzpOrder = await razorpay.orders.create({
-      amount:   Math.round(order.amount * 100), // convert to paise
+      amount: Math.round(order.amount * 100), // convert to paise
       currency: order.currency || "INR",
-      receipt:  orderId,
+      receipt: orderId,
     });
 
     order.razorpayOrderId = rzpOrder.id;
     await order.save();
 
     res.json({
-      success:         true,
+      success: true,
       razorpayOrderId: rzpOrder.id,
-      amount:          rzpOrder.amount,
-      currency:        rzpOrder.currency,
-      key:             process.env.RAZORPAY_KEY_ID,
+      amount: rzpOrder.amount,
+      currency: rzpOrder.currency,
+      key: process.env.RAZORPAY_KEY_ID,
     });
 
   } catch (err) {
@@ -473,11 +473,11 @@ app.post("/razorpay/verify-payment", async (req, res) => {
     const order = await Order.findOneAndUpdate(
       { razorpayOrderId: razorpay_order_id },
       {
-        paymentId:    razorpay_payment_id,
-        signature:    razorpay_signature,
-        status:       "PAID",
-        orderStatus:  "PLACED",
-        paidAt:       new Date(),
+        paymentId: razorpay_payment_id,
+        signature: razorpay_signature,
+        status: "PAID",
+        orderStatus: "PLACED",
+        paidAt: new Date(),
       },
       { new: true }
     );
@@ -503,10 +503,10 @@ app.get("/order/:orderId/status", async (req, res) => {
     if (!order) return res.status(404).json({ error: "Order not found" });
 
     res.json({
-      success:     true,
-      status:      order.status,
+      success: true,
+      status: order.status,
       orderStatus: order.orderStatus || "PLACED",
-      orderId:     order.orderId,
+      orderId: order.orderId,
     });
 
   } catch (err) {
@@ -539,7 +539,7 @@ app.patch("/order/:orderId/status", async (req, res) => {
     if (status) updateData.orderStatus = status;
     if (riderPhone) updateData.riderPhone = riderPhone;
     if (isRefunded !== undefined) updateData.isRefunded = isRefunded;
-    
+
     // If moving to PREPARING, set timer stuff
     if (status === "PREPARING") {
       updateData.prepStartedAt = new Date();
@@ -562,8 +562,8 @@ app.patch("/order/:orderId/status", async (req, res) => {
     if (!order) return res.status(404).json({ error: "Order not found" });
 
     res.json({
-      success:     true,
-      orderId:     order.orderId,
+      success: true,
+      orderId: order.orderId,
       orderStatus: order.orderStatus,
       estimatedPrepTime: order.estimatedPrepTime,
       prepStartedAt: order.prepStartedAt,
@@ -776,12 +776,12 @@ app.post("/rides", async (req, res) => {
     const ride = await mongoose.connection.db.collection("rides").insertOne({
       from,
       to,
-      creator:      creator      || "Anonymous",
-      seatsLeft:    seatsLeft    || 2,
-      driverName:   driverName   || "",
+      creator: creator || "Anonymous",
+      seatsLeft: seatsLeft || 2,
+      driverName: driverName || "",
       driverNumber: driverNumber || "",
-      dateTime:     dateTime     || "Today",
-      createdAt:    new Date(),
+      dateTime: dateTime || "Today",
+      createdAt: new Date(),
     });
 
     res.status(201).json({ success: true, rideId: ride.insertedId });
@@ -833,7 +833,7 @@ app.patch("/config", async (req, res) => {
     if (deliveryFee !== undefined) config.deliveryFee = Number(deliveryFee);
     config.lastUpdated = new Date();
     await config.save();
-    
+
     res.json({ success: true, config });
   } catch (err) {
     console.error("UPDATE CONFIG ERROR:", err);
@@ -950,7 +950,7 @@ const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📧 EMAIL_FROM      : ${process.env.EMAIL_FROM      || "NOT SET ❌"}`);
-  console.log(`🔑 RESEND_API_KEY  : ${process.env.RESEND_API_KEY  ? "set ✅" : "NOT SET ❌"}`);
+  console.log(`📧 EMAIL_FROM      : ${process.env.EMAIL_FROM || "NOT SET ❌"}`);
+  console.log(`🔑 RESEND_API_KEY  : ${process.env.RESEND_API_KEY ? "set ✅" : "NOT SET ❌"}`);
   console.log(`💳 RAZORPAY_KEY_ID : ${process.env.RAZORPAY_KEY_ID ? "set ✅" : "NOT SET ❌"}`);
 });
