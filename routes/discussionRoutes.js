@@ -396,4 +396,43 @@ router.post("/admin/delete-post/:id", async (req, res) => {
   }
 });
 
+/* ================= ADMIN: MASTER DELETE COMMENT ================= */
+router.post("/admin/delete-comment", async (req, res) => {
+  try {
+    const { postId, commentId } = req.body;
+    const post = await Discussion.findById(postId);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
+
+    post.comments.pull({ _id: commentId });
+    await post.save();
+    res.json({ success: true, message: "Comment removed by Admin" });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/* ================= ADMIN: MASTER DELETE REPLY ================= */
+router.post("/admin/delete-reply", async (req, res) => {
+  try {
+    const { postId, commentId, replyId } = req.body;
+    const post = await Discussion.findById(postId);
+    if (!post) return res.status(404).json({ success: false, message: "Post not found" });
+
+    const comment = post.comments.id(commentId);
+    if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
+
+    const reply = comment.replies.id(replyId);
+    if (!reply) return res.status(404).json({ success: false, message: "Reply not found" });
+
+    comment.replies.pull({ _id: replyId });
+    await post.save();
+    res.json({ success: true, message: "Reply removed by Admin" });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
