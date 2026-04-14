@@ -17,6 +17,7 @@ const busRoutes = require("./routes/busRoutes");
 const riderLocationRoutes = require("./routes/riderLocationRoutes");
 const menuRoutes = require("./routes/menuRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const chatRoutes = require("./routes/chatRoutes");
 const User  = require("./models/User");
 const Otp   = require("./models/otp");
 const Order = require("./models/order");
@@ -78,6 +79,7 @@ app.use("/bus", busRoutes);
 app.use("/rider", riderLocationRoutes);
 app.use("/menu", menuRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/chat", chatRoutes);
 /* ------------------ SERVICES ------------------ */
 
 const razorpay = new Razorpay({
