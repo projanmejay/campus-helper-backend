@@ -18,6 +18,18 @@ router.post("/request", async (req, res) => {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
+    // CHECK 1: Ensure user does not already have an active ride
+    const activeReq = await PoolRequest.findOne({ userId, status: { $ne: "cancelled" } });
+    if (activeReq) {
+      return res.status(400).json({ error: "You already have an active ride request." });
+    }
+
+    // CHECK 2: Ensure user does not have a pending join request
+    const pendingJoin = await JoinRequest.findOne({ userId, status: "pending" });
+    if (pendingJoin) {
+      return res.status(400).json({ error: "You already have a pending join request." });
+    }
+
     const newRequest = await PoolRequest.create({
       userId,
       userName,
@@ -113,6 +125,12 @@ router.post("/join", async (req, res) => {
     
     const targetReq = await PoolRequest.findById(targetRequestId);
     if (!targetReq) return res.status(404).json({ error: "Target request not found" });
+
+    // CHECK 1: Ensure user does not already have an active (grouped or standalone) ride
+    const activeReq = await PoolRequest.findOne({ userId, status: { $ne: "cancelled" } });
+    if (activeReq) {
+      return res.status(400).json({ error: "You already have an active ride. Please cancel it before joining another." });
+    }
 
     // Check if join request exists for this user and target
     const existingJoin = await JoinRequest.findOne({
