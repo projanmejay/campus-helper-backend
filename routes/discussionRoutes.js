@@ -449,7 +449,12 @@ router.post("/admin/delete-comment", async (req, res) => {
     const comment = post.comments.id(commentId);
     if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
 
-    post.comments.pull({ _id: commentId });
+    comment.isDeleted = true;
+    comment.comment = "[removed by admin]";
+    comment.user = "[deleted]";
+    comment.imageUrl = "";
+    comment.linkUrl = "";
+    
     await post.save();
     res.json({ success: true, message: "Comment removed by Admin" });
   } catch (error) {
@@ -470,7 +475,12 @@ router.post("/admin/delete-reply", async (req, res) => {
     const reply = comment.replies.id(replyId);
     if (!reply) return res.status(404).json({ success: false, message: "Reply not found" });
 
-    comment.replies.pull({ _id: replyId });
+    reply.isDeleted = true;
+    reply.comment = "[removed by admin]";
+    reply.user = "[deleted]";
+    reply.imageUrl = "";
+    reply.linkUrl = "";
+    
     await post.save();
     res.json({ success: true, message: "Reply removed by Admin" });
   } catch (error) {
