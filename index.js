@@ -178,11 +178,18 @@ app.post("/auth/register", async (req, res) => {
       return res.status(400).json({ error: "All fields required" });
     }
 
-    // Case-insensitive check to see if user exists
-    const existing = await User.findOne({ email: { $regex: new RegExp("^" + normalizedEmail + "$", "i") } });
+    // Safety: Use lowercase find if the schema lowercase:true is active, 
+    // or use collation for absolute safety without regex risks.
+    const existing = await User.findOne({ email: normalizedEmail });
     if (existing) {
       return res.status(400).json({ error: "User already registered" });
     }
+    // Double check with collation if first check fails (backup for old data)
+    const existingOld = await User.findOne({ email: normalizedEmail }).collation({ locale: 'en', strength: 2 });
+    if (existingOld) {
+      return res.status(400).json({ error: "User already registered (old record)" });
+    }
+Line 1: 
 
     const hashed = await bcrypt.hash(password, 10);
 
@@ -290,9 +297,16 @@ app.post("/auth/login", async (req, res) => {
     const normalizedEmail = email.toLowerCase().trim();
     console.log("🔑 Login attempt:", normalizedEmail);
 
-    // Case-insensitive find to handle users registered before normalization
-    const user = await User.findOne({ email: { $regex: new RegExp("^" + normalizedEmail + "$", "i") } });
+    // Try finding by exact match (since we lowercase on save now)
+    let user = await User.findOne({ email: normalizedEmail });
+    
+    // If not found, try collation search for older mixed-case records
     if (!user) {
+      user = await User.findOne({ email: normalizedEmail }).collation({ locale: 'en', strength: 2 });
+    }
+
+    if (!user) {
+      console.log("❌ User not found:", normalizedEmail);
       return res.status(404).json({ error: "User not found. Please register first." });
     }
 
