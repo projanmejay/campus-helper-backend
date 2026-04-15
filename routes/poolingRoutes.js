@@ -3,6 +3,7 @@ const router = express.Router();
 const PoolRequest = require("../models/PoolRequest");
 const RideGroup = require("../models/RideGroup");
 const RideProposal = require("../models/RideProposal");
+const JoinRequest = require("../models/JoinRequest");
 
 // -------------------------------------------------------------
 // STUDENT APP ENDPOINTS
@@ -63,13 +64,26 @@ router.get("/user/:userId/status", async (req, res) => {
       status: { $ne: "cancelled" }
     }).sort({ createdAt: -1 });
 
-    if (requests.length === 0) {
-      return res.json({ requests: [] });
-    }
-
     const populatedRequests = [];
     for (let req of requests) {
       let reqObj = req.toObject();
+      
+      // Fetch incoming JoinRequests (where targetReqId == this request)
+      const incomingJoins = await JoinRequest.find({
+        targetReqId: req._id,
+        status: "pending"
+      }).populate('joinerReqId');
+      
+      reqObj.incomingJoins = incomingJoins;
+
+      // Fetch outgoing JoinRequests (where joinerReqId == this request)
+      const outgoingJoin = await JoinRequest.findOne({
+        joinerReqId: req._id,
+        status: "pending"
+      }).populate('targetReqId');
+      
+      reqObj.outgoingJoin = outgoingJoin;
+
       if (req.groupId) {
         const group = await RideGroup.findById(req.groupId);
         reqObj.group = group;
@@ -90,7 +104,7 @@ router.get("/user/:userId/status", async (req, res) => {
   }
 });
 
-// Join an existing request / Merge
+// Send a Join Request
 router.post("/join", async (req, res) => {
   try {
     const { targetRequestId, userId, userName, userPhone, pickup, preferredTime } = req.body;
@@ -98,50 +112,108 @@ router.post("/join", async (req, res) => {
     const targetReq = await PoolRequest.findById(targetRequestId);
     if (!targetReq) return res.status(404).json({ error: "Target request not found" });
 
-    // Create the joiner's request
-    const joinerReq = await PoolRequest.create({
-      userId, userName, userPhone, pickup,
-      destination: targetReq.destination,
-      preferredTime: new Date(preferredTime),
-      status: "grouped"
+    // Ensure the user hasn't already sent a join request to this target
+    // We must find if they have an active PoolRequest that is joining this one
+    const existingReq = await PoolRequest.findOne({ userId, status: "pending" });
+    
+    let joinerReq = existingReq;
+    if (!joinerReq) {
+      joinerReq = await PoolRequest.create({
+        userId, userName, userPhone, pickup,
+        destination: targetReq.destination,
+        preferredTime: new Date(preferredTime),
+        status: "pending"
+      });
+    }
+
+    // Check if join request exists
+    const existingJoin = await JoinRequest.findOne({
+      joinerReqId: joinerReq._id,
+      targetReqId: targetRequestId,
+      status: "pending"
     });
 
-    // Check if target is already in a group
+    if (existingJoin) {
+       return res.status(400).json({ error: "Already requested to join this ride" });
+    }
+
+    const joinRequest = await JoinRequest.create({
+      joinerReqId: joinerReq._id,
+      targetReqId: targetRequestId,
+      proposedTime: new Date(preferredTime)
+    });
+
+    res.json({ success: true, joinRequest });
+  } catch (error) {
+    console.error("Error sending join request:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Accept a Join Request
+router.post("/join/accept", async (req, res) => {
+  try {
+    const { joinRequestId, userId } = req.body;
+    const joinReq = await JoinRequest.findById(joinRequestId).populate('joinerReqId').populate('targetReqId');
+    if (!joinReq) return res.status(404).json({ error: "Join request not found" });
+
+    // Optional verification that userId owns targetReqId could go here
+    
+    joinReq.status = "accepted";
+    await joinReq.save();
+
+    const targetReq = joinReq.targetReqId;
+    const joinerReq = joinReq.joinerReqId;
+
     let group;
     if (targetReq.groupId) {
       group = await RideGroup.findById(targetReq.groupId);
-      if (group.users.length >= 4) {
-        return res.status(400).json({ error: "Group is full" });
-      }
+      if (group.users.length >= 4) return res.status(400).json({ error: "Group is full" });
+      
       group.requests.push(joinerReq._id);
-      group.users.push({ userId, userName, userPhone });
-      // update agreedTime average or keep earliest
+      group.users.push({ userId: joinerReq.userId, userName: joinerReq.userName, userPhone: joinerReq.userPhone });
       await group.save();
     } else {
-      // Create new group for these two
       targetReq.status = "grouped";
       await targetReq.save();
       
       group = await RideGroup.create({
         destination: targetReq.destination,
-        agreedTime: targetReq.preferredTime, // Simply pick target's time
+        agreedTime: targetReq.preferredTime, 
         requests: [targetReq._id, joinerReq._id],
         users: [
           { userId: targetReq.userId, userName: targetReq.userName, userPhone: targetReq.userPhone },
-          { userId, userName, userPhone }
+          { userId: joinerReq.userId, userName: joinerReq.userName, userPhone: joinerReq.userPhone }
         ]
       });
-      
       targetReq.groupId = group._id;
       await targetReq.save();
     }
-    
+
+    joinerReq.status = "grouped";
     joinerReq.groupId = group._id;
     await joinerReq.save();
 
     res.json({ success: true, group });
   } catch (error) {
-    console.error("Error joining request:", error);
+    console.error("Error accepting join:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Reject a Join Request
+router.post("/join/reject", async (req, res) => {
+  try {
+    const { joinRequestId } = req.body;
+    const joinReq = await JoinRequest.findById(joinRequestId);
+    if (!joinReq) return res.status(404).json({ error: "Not found" });
+    
+    joinReq.status = "rejected";
+    await joinReq.save();
+    
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Error rejecting join:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
