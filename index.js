@@ -171,25 +171,16 @@ app.post("/user/create-username", async (req, res) => {
 app.post("/auth/register", async (req, res) => {
   try {
     const { name, hall, email, password } = req.body;
-    const normalizedEmail = email.toLowerCase().trim();
-    console.log("📩 Register attempt:", normalizedEmail);
+
+    console.log("📩 Register attempt:", email);
 
     if (!name || !hall || !email || !password) {
       return res.status(400).json({ error: "All fields required" });
     }
 
-    // Safety: Use lowercase find if the schema lowercase:true is active, 
-    // or use collation for absolute safety without regex risks.
-    const existing = await User.findOne({ email: normalizedEmail });
-    if (existing) {
-      return res.status(400).json({ error: "User already registered" });
+    if (await User.findOne({ email })) {
+      return res.status(400).json({ error: "User already exists" });
     }
-    // Double check with collation if first check fails (backup for old data)
-    const existingOld = await User.findOne({ email: normalizedEmail }).collation({ locale: 'en', strength: 2 });
-    if (existingOld) {
-      return res.status(400).json({ error: "User already registered (old record)" });
-    }
-Line 1: 
 
     const hashed = await bcrypt.hash(password, 10);
 
@@ -239,16 +230,17 @@ Line 1:
     res.status(500).json({ error: "Server error" });
   }
 });
+
 app.post("/auth/verify-otp", async (req, res) => {
   try {
     const { email, otp } = req.body;
-    const normalizedEmail = email.toLowerCase().trim();
-    console.log("🔐 OTP verify:", normalizedEmail);
 
-    const record = await Otp.findOne({ email: normalizedEmail });
+    console.log("🔐 OTP verify:", email);
+
+    const record = await Otp.findOne({ email });
 
     if (!record) {
-      return res.status(400).json({ error: "Record not found. Please register again." });
+      return res.status(400).json({ error: "Invalid OTP" });
     }
 
     if (record.expiresAt < new Date()) {
@@ -294,24 +286,14 @@ app.post("/auth/verify-otp", async (req, res) => {
 app.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
-    const normalizedEmail = email.toLowerCase().trim();
-    console.log("🔑 Login attempt:", normalizedEmail);
 
-    // Try finding by exact match (since we lowercase on save now)
-    let user = await User.findOne({ email: normalizedEmail });
-    
-    // If not found, try collation search for older mixed-case records
-    if (!user) {
-      user = await User.findOne({ email: normalizedEmail }).collation({ locale: 'en', strength: 2 });
-    }
+    console.log("🔑 Login attempt:", email);
 
-    if (!user) {
-      console.log("❌ User not found:", normalizedEmail);
-      return res.status(404).json({ error: "User not found. Please register first." });
-    }
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ error: "User not found" });
 
     if (!(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ error: "Invalid password. Please try again." });
+      return res.status(400).json({ error: "Invalid password" });
     }
 
     console.log("✅ Login success:", email);
