@@ -72,18 +72,14 @@ router.get("/user/:userId/status", async (req, res) => {
       const incomingJoins = await JoinRequest.find({
         targetReqId: req._id,
         status: "pending"
-      }).populate('joinerReqId');
+      });
       
       reqObj.incomingJoins = incomingJoins;
 
-      // Fetch outgoing JoinRequests (where joinerReqId == this request)
-      const outgoingJoin = await JoinRequest.findOne({
-        joinerReqId: req._id,
-        status: "pending"
-      }).populate('targetReqId');
+      // Fetch outgoing JoinRequests (where joinerReqId == this request - Wait, we removed joinerReqId, now we just check if this user has any JoinRequests pointing anywhere!)
+      // Actually outgoingJoin applies to the User globally, not tied to a specific request they own.
+      // We will handle that outside the `requests` loop.
       
-      reqObj.outgoingJoin = outgoingJoin;
-
       if (req.groupId) {
         const group = await RideGroup.findById(req.groupId);
         reqObj.group = group;
@@ -97,7 +93,13 @@ router.get("/user/:userId/status", async (req, res) => {
       populatedRequests.push(reqObj);
     }
 
-    res.json({ requests: populatedRequests });
+    // Fetch outgoing JoinRequests for this user globally
+    const outgoingJoins = await JoinRequest.find({
+      userId: req.params.userId,
+      status: "pending"
+    }).populate('targetReqId');
+
+    res.json({ requests: populatedRequests, outgoingJoins });
   } catch (error) {
     console.error("Error fetching user status:", error);
     res.status(500).json({ error: "Server error" });
@@ -112,23 +114,9 @@ router.post("/join", async (req, res) => {
     const targetReq = await PoolRequest.findById(targetRequestId);
     if (!targetReq) return res.status(404).json({ error: "Target request not found" });
 
-    // Ensure the user hasn't already sent a join request to this target
-    // We must find if they have an active PoolRequest that is joining this one
-    const existingReq = await PoolRequest.findOne({ userId, status: "pending" });
-    
-    let joinerReq = existingReq;
-    if (!joinerReq) {
-      joinerReq = await PoolRequest.create({
-        userId, userName, userPhone, pickup,
-        destination: targetReq.destination,
-        preferredTime: new Date(preferredTime),
-        status: "pending"
-      });
-    }
-
-    // Check if join request exists
+    // Check if join request exists for this user and target
     const existingJoin = await JoinRequest.findOne({
-      joinerReqId: joinerReq._id,
+      userId,
       targetReqId: targetRequestId,
       status: "pending"
     });
@@ -137,8 +125,17 @@ router.post("/join", async (req, res) => {
        return res.status(400).json({ error: "Already requested to join this ride" });
     }
 
+    // Ensure the user hasn't spammed someone else while pending either
+    const anyPendingJoin = await JoinRequest.findOne({ userId, status: "pending" });
+    if (anyPendingJoin) {
+      return res.status(400).json({ error: "You already have a pending join request to another ride." });
+    }
+
     const joinRequest = await JoinRequest.create({
-      joinerReqId: joinerReq._id,
+      userId,
+      userName,
+      userPhone,
+      pickup,
       targetReqId: targetRequestId,
       proposedTime: new Date(preferredTime)
     });
@@ -154,16 +151,24 @@ router.post("/join", async (req, res) => {
 router.post("/join/accept", async (req, res) => {
   try {
     const { joinRequestId, userId } = req.body;
-    const joinReq = await JoinRequest.findById(joinRequestId).populate('joinerReqId').populate('targetReqId');
+    const joinReq = await JoinRequest.findById(joinRequestId).populate('targetReqId');
     if (!joinReq) return res.status(404).json({ error: "Join request not found" });
 
-    // Optional verification that userId owns targetReqId could go here
-    
     joinReq.status = "accepted";
     await joinReq.save();
 
     const targetReq = joinReq.targetReqId;
-    const joinerReq = joinReq.joinerReqId;
+
+    // Create a PoolRequest for the joiner NOW that they are accepted
+    const joinerReq = await PoolRequest.create({
+      userId: joinReq.userId, 
+      userName: joinReq.userName, 
+      userPhone: joinReq.userPhone, 
+      pickup: joinReq.pickup,
+      destination: targetReq.destination,
+      preferredTime: targetReq.preferredTime, // Inherit base time or use proposed
+      status: "grouped"
+    });
 
     let group;
     if (targetReq.groupId) {
@@ -190,7 +195,6 @@ router.post("/join/accept", async (req, res) => {
       await targetReq.save();
     }
 
-    joinerReq.status = "grouped";
     joinerReq.groupId = group._id;
     await joinerReq.save();
 
