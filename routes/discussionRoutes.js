@@ -331,7 +331,12 @@ router.post("/delete-comment", async (req, res) => {
     if (!comment) return res.status(404).json({ success: false, message: "Comment not found" });
     if (comment.authorEmail !== email) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    post.comments.pull({ _id: commentId });
+    comment.isDeleted = true;
+    comment.comment = "[deleted]";
+    comment.imageUrl = "";
+    comment.linkUrl = "";
+    comment.user = "[deleted]";
+    
     await post.save();
     res.json({ success: true, message: "Comment deleted" });
   } catch (error) {
@@ -353,7 +358,12 @@ router.post("/delete-reply", async (req, res) => {
     if (!reply) return res.status(404).json({ success: false, message: "Reply not found" });
     if (reply.authorEmail !== email) return res.status(403).json({ success: false, message: "Unauthorized" });
 
-    comment.replies.pull({ _id: replyId });
+    reply.isDeleted = true;
+    reply.comment = "[deleted]";
+    reply.imageUrl = "";
+    reply.linkUrl = "";
+    reply.user = "[deleted]";
+    
     await post.save();
     res.json({ success: true, message: "Reply deleted" });
   } catch (error) {

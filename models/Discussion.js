@@ -14,6 +14,7 @@ const replySchema = new mongoose.Schema({
   ],
   imageUrl: { type: String },
   linkUrl:  { type: String },
+  isDeleted: { type: Boolean, default: false },
   replyToId: { type: String, default: null }, // Allows infinite recursive nesting inside a flat array
   createdAt: { type: Date, default: Date.now },
 });
@@ -32,6 +33,7 @@ const commentSchema = new mongoose.Schema({
   ],
   imageUrl: { type: String },
   linkUrl:  { type: String },
+  isDeleted: { type: Boolean, default: false },
   replies:   [replySchema],
   createdAt: { type: Date, default: Date.now },
 });
