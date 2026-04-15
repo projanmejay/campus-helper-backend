@@ -18,6 +18,7 @@ const riderLocationRoutes = require("./routes/riderLocationRoutes");
 const menuRoutes = require("./routes/menuRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const chatRoutes = require("./routes/chatRoutes");
+const poolingRoutes = require("./routes/poolingRoutes");
 const User = require("./models/User");
 const Otp = require("./models/otp");
 const Order = require("./models/order");
@@ -75,6 +76,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 app.use("/discussion", discussionRoutes);
 app.use("/ride-requests", rideRequestRoutes);
+app.use("/pooling", poolingRoutes);
 app.use("/bus", busRoutes);
 app.use("/rider", riderLocationRoutes);
 app.use("/menu", menuRoutes);
