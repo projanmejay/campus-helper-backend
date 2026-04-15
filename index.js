@@ -170,16 +170,15 @@ app.post("/user/create-username", async (req, res) => {
 
 app.post("/auth/register", async (req, res) => {
   try {
-    const { name, hall, email, password } = req.body;
-
-    console.log("📩 Register attempt:", email);
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log("📩 Register attempt:", normalizedEmail);
 
     if (!name || !hall || !email || !password) {
       return res.status(400).json({ error: "All fields required" });
     }
 
-    if (await User.findOne({ email })) {
-      return res.status(400).json({ error: "User already exists" });
+    if (await User.findOne({ email: normalizedEmail })) {
+      return res.status(400).json({ error: "User already registered" });
     }
 
     const hashed = await bcrypt.hash(password, 10);
@@ -233,14 +232,13 @@ app.post("/auth/register", async (req, res) => {
 
 app.post("/auth/verify-otp", async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log("🔐 OTP verify:", normalizedEmail);
 
-    console.log("🔐 OTP verify:", email);
-
-    const record = await Otp.findOne({ email });
+    const record = await Otp.findOne({ email: normalizedEmail });
 
     if (!record) {
-      return res.status(400).json({ error: "Invalid OTP" });
+      return res.status(400).json({ error: "Record not found. Please register again." });
     }
 
     if (record.expiresAt < new Date()) {
@@ -285,15 +283,16 @@ app.post("/auth/verify-otp", async (req, res) => {
 
 app.post("/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const normalizedEmail = email.toLowerCase().trim();
+    console.log("🔑 Login attempt:", normalizedEmail);
 
-    console.log("🔑 Login attempt:", email);
-
-    const user = await User.findOne({ email });
-    if (!user) return res.status(400).json({ error: "User not found" });
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(404).json({ error: "User not found. Please register first." });
+    }
 
     if (!(await bcrypt.compare(password, user.password))) {
-      return res.status(400).json({ error: "Invalid password" });
+      return res.status(401).json({ error: "Invalid password. Please try again." });
     }
 
     console.log("✅ Login success:", email);
