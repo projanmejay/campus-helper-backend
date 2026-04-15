@@ -170,6 +170,7 @@ app.post("/user/create-username", async (req, res) => {
 
 app.post("/auth/register", async (req, res) => {
   try {
+    const { name, hall, email, password } = req.body;
     const normalizedEmail = email.toLowerCase().trim();
     console.log("📩 Register attempt:", normalizedEmail);
 
@@ -177,7 +178,9 @@ app.post("/auth/register", async (req, res) => {
       return res.status(400).json({ error: "All fields required" });
     }
 
-    if (await User.findOne({ email: normalizedEmail })) {
+    // Case-insensitive check to see if user exists
+    const existing = await User.findOne({ email: { $regex: new RegExp("^" + normalizedEmail + "$", "i") } });
+    if (existing) {
       return res.status(400).json({ error: "User already registered" });
     }
 
@@ -229,9 +232,9 @@ app.post("/auth/register", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
-
 app.post("/auth/verify-otp", async (req, res) => {
   try {
+    const { email, otp } = req.body;
     const normalizedEmail = email.toLowerCase().trim();
     console.log("🔐 OTP verify:", normalizedEmail);
 
@@ -283,10 +286,12 @@ app.post("/auth/verify-otp", async (req, res) => {
 
 app.post("/auth/login", async (req, res) => {
   try {
+    const { email, password } = req.body;
     const normalizedEmail = email.toLowerCase().trim();
     console.log("🔑 Login attempt:", normalizedEmail);
 
-    const user = await User.findOne({ email: normalizedEmail });
+    // Case-insensitive find to handle users registered before normalization
+    const user = await User.findOne({ email: { $regex: new RegExp("^" + normalizedEmail + "$", "i") } });
     if (!user) {
       return res.status(404).json({ error: "User not found. Please register first." });
     }
