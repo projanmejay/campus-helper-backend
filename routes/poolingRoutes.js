@@ -168,4 +168,37 @@ router.post("/accept-proposal", async (req, res) => {
   }
 });
 
+// 9. Student: Delete a ride request
+router.delete("/request/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const request = await PoolingRequest.findById(id);
+    if (!request) return res.status(404).json({ error: "Request not found" });
+
+    // Handle group cleanup if request is part of a group
+    if (request.groupId) {
+      const group = await PoolingGroup.findById(request.groupId);
+      if (group) {
+        // Remove this user from members
+        group.members = group.members.filter(m => m.userId !== request.userId);
+        
+        if (group.members.length === 0) {
+          await PoolingGroup.findByIdAndDelete(group._id);
+          // Also delete any proposal for this group
+          if (group.proposalId) {
+            await PoolingProposal.findByIdAndDelete(group.proposalId);
+          }
+        } else {
+          await group.save();
+        }
+      }
+    }
+
+    await PoolingRequest.findByIdAndDelete(id);
+    res.json({ success: true, message: "Request deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
