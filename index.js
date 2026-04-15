@@ -49,15 +49,6 @@ app.use(
     },
   })
 );
-app.use(express.static("public"));
-
-app.get("/health", (req, res) => {
-  res.json({ 
-    status: "ok", 
-    uptime: process.uptime(),
-    db: mongoose.connection.readyState === 1 ? "connected" : "disconnected"
-  });
-});
 app.use(express.urlencoded({ limit: '20mb', extended: true })); // Correctly handle form-data from transmitter app
 
 
@@ -298,11 +289,6 @@ app.post("/auth/verify-otp", async (req, res) => {
     console.error("VERIFY OTP ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
-});
-
-// Diagnostic GET route to verify domain accessibility in browser
-app.get("/auth/login", (req, res) => {
-  res.json({ success: true, message: "Login logic is alive. Please use POST to log in." });
 });
 
 app.post("/auth/login", async (req, res) => {
