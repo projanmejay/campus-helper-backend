@@ -328,7 +328,7 @@ router.get("/admin/groups", async (req, res) => {
 // Propose a ride
 router.post("/admin/propose", async (req, res) => {
   try {
-    const { groupId, driverName, driverPhone, ownerPhone, pickupTime } = req.body;
+    const { groupId, driverName, driverPhone, ownerPhone, pickupLocation, pickupTime } = req.body;
     
     const group = await RideGroup.findById(groupId);
     if (!group) return res.status(404).json({ error: "Group not found" });
@@ -338,6 +338,7 @@ router.post("/admin/propose", async (req, res) => {
       driverName,
       driverPhone,
       ownerPhone,
+      pickupLocation,
       pickupTime: new Date(pickupTime),
     });
 
