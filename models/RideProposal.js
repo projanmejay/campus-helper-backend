@@ -6,6 +6,7 @@ const rideProposalSchema = new mongoose.Schema(
     
     driverName: { type: String, required: true },
     driverPhone: { type: String, required: true },
+    ownerPhone: { type: String },
     pickupTime: { type: Date, required: true },
     
     // List of userIds who accepted
