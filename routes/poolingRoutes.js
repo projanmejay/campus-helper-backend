@@ -111,12 +111,16 @@ router.get("/my-status/:userId", async (req, res) => {
   }
 });
 
-// 6. Owner Dashboard: View all groups needing cabs
+// 6. Owner Dashboard: View all groups and individual requests needing cabs
 router.get("/owner/dashboard", async (req, res) => {
   try {
-    // Show WAITING_FOR_CAB or PENDING groups
+    // Show groups WAITING_FOR_CAB or CAB_PROPOSED
     const groups = await PoolingGroup.find({ status: { $ne: "CONFIRMED" } }).sort({ scheduledTime: 1 });
-    res.json(groups);
+    
+    // Also show individual requests that haven't been grouped yet
+    const requests = await PoolingRequest.find({ status: "PENDING" }).sort({ dateTime: 1 });
+
+    res.json({ groups, requests });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
