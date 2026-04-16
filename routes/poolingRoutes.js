@@ -285,8 +285,8 @@ router.post("/admin/group", async (req, res) => {
     }
     
     const destination = requests[0].destination;
-    // Earliest time
-    let agreedTime = requests[0].preferredTime;
+    // Set agreed time to the earliest preferredTime among all requests
+    const agreedTime = new Date(Math.min(...requests.map(r => r.preferredTime.getTime())));
     
     const users = requests.map(r => ({
       userId: r.userId, 
