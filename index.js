@@ -97,9 +97,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 app.get("/user/check-username", async (req, res) => {
   try {
-    const { email } = req.query;
-
-    if (!email) return res.status(400).json({ error: "email is required" });
+    const { email: rawEmail } = req.query;
+    if (!rawEmail) return res.status(400).json({ error: "email is required" });
+    const email = rawEmail.toLowerCase();
 
     const user = await User.findOne({ email });
 
@@ -135,7 +135,8 @@ app.get("/user/exists", async (req, res) => {
 
 app.post("/user/create-username", async (req, res) => {
   try {
-    const { email, username } = req.body;
+    const { email: rawEmail, username } = req.body;
+    const email = rawEmail ? rawEmail.toLowerCase() : null;
 
     if (!username || username.trim().length < 3) {
       return res.status(400).json({ error: "Username must be at least 3 characters" });
@@ -170,7 +171,8 @@ app.post("/user/create-username", async (req, res) => {
 
 app.post("/auth/register", async (req, res) => {
   try {
-    const { name, hall, email, password } = req.body;
+    const { name, hall, email: rawEmail, password } = req.body;
+    const email = rawEmail ? rawEmail.toLowerCase() : null;
 
     console.log("📩 Register attempt:", email);
 
@@ -233,7 +235,8 @@ app.post("/auth/register", async (req, res) => {
 
 app.post("/auth/verify-otp", async (req, res) => {
   try {
-    const { email, otp } = req.body;
+    const { email: rawEmail, otp } = req.body;
+    const email = rawEmail ? rawEmail.toLowerCase() : null;
 
     console.log("🔐 OTP verify:", email);
 
@@ -285,7 +288,8 @@ app.post("/auth/verify-otp", async (req, res) => {
 
 app.post("/auth/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email: rawEmail, password } = req.body;
+    const email = rawEmail ? rawEmail.toLowerCase() : null;
 
     console.log("🔑 Login attempt:", email);
 
