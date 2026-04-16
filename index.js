@@ -171,12 +171,12 @@ app.post("/user/create-username", async (req, res) => {
 
 app.post("/auth/register", async (req, res) => {
   try {
-    const { name, hall, email: rawEmail, password } = req.body;
+    const { name, hall, email: rawEmail, password, phone } = req.body;
     const email = rawEmail ? rawEmail.toLowerCase() : null;
 
     console.log("📩 Register attempt:", email);
 
-    if (!name || !hall || !email || !password) {
+    if (!name || !hall || !email || !password || !phone) {
       return res.status(400).json({ error: "All fields required" });
     }
 
@@ -199,6 +199,7 @@ app.post("/auth/register", async (req, res) => {
       email,
       name,
       hall,
+      phone,
       password: hashed,
       otp,
       expiresAt: new Date(Date.now() + 5 * 60 * 1000),
@@ -258,6 +259,7 @@ app.post("/auth/verify-otp", async (req, res) => {
     const user = await User.create({
       name: record.name,
       hall: record.hall,
+      phone: record.phone,
       email: record.email,
       password: record.password,
       verified: true,
@@ -275,7 +277,6 @@ app.post("/auth/verify-otp", async (req, res) => {
         name: user.name,
         hall: user.hall,
         email: user.email,
-        hall: user.hall,
         phone: user.phone || '',
       },
     });
