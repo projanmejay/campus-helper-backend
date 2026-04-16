@@ -14,8 +14,9 @@ router.post("/request", async (req, res) => {
   try {
     const { userId, userName, userPhone, pickup, destination, preferredTime } = req.body;
     
-    if (!userId || !pickup || !destination || !preferredTime) {
-      return res.status(400).json({ error: "Missing required fields" });
+    const preferredDate = new Date(preferredTime);
+    if (preferredDate < new Date()) {
+      return res.status(400).json({ error: "Preferred time must be in the future" });
     }
 
     const newRequest = await PoolRequest.create({
@@ -24,7 +25,7 @@ router.post("/request", async (req, res) => {
       userPhone,
       pickup,
       destination,
-      preferredTime: new Date(preferredTime),
+      preferredTime: preferredDate,
     });
 
     res.status(201).json(newRequest);
@@ -125,13 +126,18 @@ router.post("/join", async (req, res) => {
        return res.status(400).json({ error: "Already requested to join this ride" });
     }
 
+    const proposedTimeDate = new Date(preferredTime);
+    if (proposedTimeDate < new Date()) {
+      return res.status(400).json({ error: "Proposed time must be in the future" });
+    }
+
     const joinRequest = await JoinRequest.create({
       userId,
       userName,
       userPhone,
       pickup,
       targetReqId: targetRequestId,
-      proposedTime: new Date(preferredTime)
+      proposedTime: proposedTimeDate
     });
 
     res.json({ success: true, joinRequest });
@@ -276,7 +282,7 @@ router.post("/admin/group", async (req, res) => {
     const { requestIds } = req.body; // Array of PoolRequest IDs
     
     if (!Array.isArray(requestIds) || requestIds.length < 2 || requestIds.length > 4) {
-      return res.status(400).json({ error: "Need 2-4 requests to form a group" });
+      return res.status(400).json({ error: "Group size must be between 2 and 4" });
     }
 
     const requests = await PoolRequest.find({ _id: { $in: requestIds } });
@@ -284,9 +290,24 @@ router.post("/admin/group", async (req, res) => {
       return res.status(404).json({ error: "Some requests not found" });
     }
     
+    // Validate time gaps
     const destination = requests[0].destination;
+    const times = requests.map(r => r.preferredTime.getTime());
+    const minTime = Math.min(...times);
+    const maxTime = Math.max(...times);
+    const gapMs = maxTime - minTime;
+    
+    const isAirport = destination.toLowerCase().includes("airport") || destination.toLowerCase().includes("ccu");
+    const maxGapMs = isAirport ? 2 * 60 * 60 * 1000 : 30 * 60 * 1000;
+    
+    if (gapMs > maxGapMs) {
+      const gapMin = Math.round(gapMs / 60000);
+      const limitMin = Math.round(maxGapMs / 60000);
+      return res.status(400).json({ error: `Time gap too large (${gapMin}m). Max allowed: ${limitMin}m` });
+    }
+
     // Set agreed time to the earliest preferredTime among all requests
-    const agreedTime = new Date(Math.min(...requests.map(r => r.preferredTime.getTime())));
+    const agreedTime = new Date(minTime);
     
     const users = requests.map(r => ({
       userId: r.userId, 
@@ -348,6 +369,78 @@ router.post("/admin/propose", async (req, res) => {
     res.status(201).json(proposal);
   } catch (error) {
     console.error("Error creating proposal:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Admin ungroup - disbands a group
+router.post("/admin/ungroup", async (req, res) => {
+  try {
+    const { groupId } = req.body;
+    const group = await RideGroup.findById(groupId);
+    if (!group) return res.status(404).json({ error: "Group not found" });
+
+    // Reset all pool requests
+    await PoolRequest.updateMany(
+      { groupId: groupId },
+      { status: "pending", groupId: null }
+    );
+
+    // Delete proposal if any
+    await RideProposal.deleteMany({ groupId: groupId });
+    
+    // Delete the group
+    await RideGroup.findByIdAndDelete(groupId);
+
+    res.json({ success: true, message: "Group disbanded" });
+  } catch (error) {
+    console.error("Ungroup error:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// Leave group - individual user leaving
+router.post("/group/leave", async (req, res) => {
+  try {
+    const { requestId, userId } = req.body;
+    
+    const poolReq = await PoolRequest.findById(requestId);
+    if (!poolReq) return res.status(404).json({ error: "Request not found" });
+    if (poolReq.userId !== userId) return res.status(403).json({ error: "Unauthorized" });
+    if (!poolReq.groupId) return res.status(400).json({ error: "Not in a group" });
+
+    const groupId = poolReq.groupId;
+    const group = await RideGroup.findById(groupId);
+    if (!group) return res.status(404).json({ error: "Group not found" });
+
+    // Remove from group
+    group.requests = group.requests.filter(id => id.toString() !== requestId);
+    group.users = group.users.filter(u => u.userId !== userId);
+
+    // Reset the request
+    poolReq.status = "pending";
+    poolReq.groupId = null;
+    await poolReq.save();
+
+    if (group.users.length < 2) {
+      // Disband entirely if only 1 (or 0) left
+      for (let rid of group.requests) {
+        await PoolRequest.findByIdAndUpdate(rid, { status: "pending", groupId: null });
+      }
+      await RideProposal.deleteMany({ groupId: groupId });
+      await RideGroup.findByIdAndDelete(groupId);
+      return res.json({ success: true, disbanded: true });
+    } else {
+      await group.save();
+      // Update agreedTime to new earliest if needed? (Requirement didn't specify, but good for consistency)
+      const remainingReqs = await PoolRequest.find({ _id: { $in: group.requests } });
+      const minTime = Math.min(...remainingReqs.map(r => r.preferredTime.getTime()));
+      group.agreedTime = new Date(minTime);
+      await group.save();
+      return res.json({ success: true, disbanded: false });
+    }
+  } catch (error) {
+    console.error("Leave group error:", error);
     res.status(500).json({ error: "Server error" });
   }
 });
