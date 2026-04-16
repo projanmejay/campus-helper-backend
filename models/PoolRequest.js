@@ -19,6 +19,7 @@ const poolRequestSchema = new mongoose.Schema(
     },
     
     groupId: { type: mongoose.Schema.Types.ObjectId, ref: 'RideGroup', default: null },
+    isHost: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -26,6 +26,7 @@ router.post("/request", async (req, res) => {
       pickup,
       destination,
       preferredTime: preferredDate,
+      isHost: true,
     });
 
     res.status(201).json(newRequest);
@@ -159,15 +160,17 @@ router.post("/join/accept", async (req, res) => {
 
     const targetReq = joinReq.targetReqId;
 
-    // Create a PoolRequest for the joiner NOW that they are accepted
+    // Create a shadow PoolRequest for the joiner so they appear grouped
     const joinerReq = await PoolRequest.create({
-      userId: joinReq.userId, 
-      userName: joinReq.userName, 
-      userPhone: joinReq.userPhone, 
+      userId: joinReq.userId,
+      userName: joinReq.userName,
+      userPhone: joinReq.userPhone,
       pickup: joinReq.pickup,
       destination: targetReq.destination,
-      preferredTime: targetReq.preferredTime, // Inherit base time or use proposed
-      status: "grouped"
+      preferredTime: targetReq.preferredTime, // Inherits host's time
+      status: "grouped",
+      groupId: targetReq.groupId || null,
+      isHost: false, // Joiners are not hosts
     });
 
     let group;
@@ -322,9 +325,10 @@ router.post("/admin/group", async (req, res) => {
       users
     });
 
+    // Mark all as isHost: true in admin grouping (since they all posted rides)
     await PoolRequest.updateMany(
       { _id: { $in: requestIds } },
-      { status: "grouped", groupId: newGroup._id }
+      { status: "grouped", groupId: newGroup._id, isHost: true }
     );
 
     res.json(newGroup);
@@ -408,7 +412,7 @@ router.post("/group/leave", async (req, res) => {
     if (!poolReq) return res.status(404).json({ error: "Request not found" });
     if (poolReq.userId !== userId) return res.status(403).json({ error: "Unauthorized" });
     if (!poolReq.groupId) return res.status(400).json({ error: "Not in a group" });
-
+    
     const groupId = poolReq.groupId;
     const group = await RideGroup.findById(groupId);
     if (!group) return res.status(404).json({ error: "Group not found" });
