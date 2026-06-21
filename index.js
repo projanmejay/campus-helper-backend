@@ -292,28 +292,26 @@ app.post('/auth/forgot-password', async (req, res) => {
 
     // To avoid user enumeration, always respond with success. But only create token if user exists.
     if (!user) {
-      return res.json({ success: true, message: 'If the account exists, a reset email will be sent.' });
+      return res.json({ success: true, message: 'If the account exists, an OTP will be sent.' });
     }
 
     // Delete any existing tokens for this email
     await PasswordReset.deleteMany({ email });
 
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const otp = otpGenerator.generate(6, { digits: true, upperCaseAlphabets: false, lowerCaseAlphabets: false, specialChars: false });
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
 
-    await PasswordReset.create({ email, token, expiresAt });
-
-    // Send reset email
-    const resetLink = `${process.env.FRONTEND_URL || 'https://campus-helper.app'}/reset-password?token=${token}`;
+    await PasswordReset.create({ email, token: otp, expiresAt });
 
     const { data, error } = await resend.emails.send({
       from: process.env.EMAIL_FROM,
       to: email,
-      subject: 'Campus Helper — Password reset',
+      subject: 'Campus Helper — Password reset OTP',
       html: `
         <h3>Password reset request</h3>
-        <p>Click the link below to reset your password. This link is valid for 1 hour.</p>
-        <p><a href="${resetLink}">Reset your password</a></p>
+        <p>Your OTP to reset your password is:</p>
+        <h2 style="letter-spacing:4px">${otp}</h2>
+        <p>This OTP is valid for 10 minutes.</p>
         <p>If you did not request this, ignore this email.</p>
       `,
     });
@@ -321,10 +319,10 @@ app.post('/auth/forgot-password', async (req, res) => {
     if (error) {
       console.error('RESEND ERROR (forgot-password):', JSON.stringify(error));
       // Still respond success to frontend
-      return res.json({ success: true, message: 'If the account exists, a reset email will be sent.' });
+      return res.json({ success: true, message: 'If the account exists, an OTP will be sent.' });
     }
 
-    res.json({ success: true, message: 'If the account exists, a reset email will be sent.' });
+    res.json({ success: true, message: 'If the account exists, an OTP will be sent.' });
   } catch (err) {
     console.error('FORGOT PASSWORD ERROR:', err);
     res.status(500).json({ error: 'Server error' });
@@ -333,24 +331,24 @@ app.post('/auth/forgot-password', async (req, res) => {
 
 app.post('/auth/reset-password', async (req, res) => {
   try {
-    const { token, password } = req.body;
-    if (!token || !password) return res.status(400).json({ error: 'token and password required' });
+    const { email, otp, password } = req.body;
+    if (!email || !otp || !password) return res.status(400).json({ error: 'email, otp, and password required' });
 
-    const record = await PasswordReset.findOne({ token });
-    if (!record) return res.status(400).json({ error: 'Invalid or expired token' });
+    const record = await PasswordReset.findOne({ email, token: otp });
+    if (!record) return res.status(400).json({ error: 'Invalid or expired OTP' });
     if (record.expiresAt < new Date()) {
-      await PasswordReset.deleteOne({ token });
-      return res.status(400).json({ error: 'Token expired' });
+      await PasswordReset.deleteOne({ _id: record._id });
+      return res.status(400).json({ error: 'OTP expired' });
     }
 
-    const user = await User.findOne({ email: record.email });
+    const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     const hashed = await bcrypt.hash(password, 10);
     user.password = hashed;
     await user.save();
 
-    await PasswordReset.deleteMany({ email: record.email });
+    await PasswordReset.deleteMany({ email });
 
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (err) {
