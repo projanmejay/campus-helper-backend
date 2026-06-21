@@ -28,6 +28,7 @@ app.use(cors());
 // Keep raw body available for Razorpay webhook signature verification
 app.use(
   express.json({
+    limit: '50mb',
     verify: (req, res, buf) => {
       if (req.originalUrl.includes("/razorpay/webhook")) {
         req.rawBody = buf;
@@ -607,6 +608,38 @@ app.get("/drivers", async (req, res) => {
   } catch (err) {
     console.error("GET DRIVERS ERROR:", err);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* ===================================================== */
+/* ================= UPLOAD IMAGE ====================== */
+/* ===================================================== */
+
+app.post('/upload-image', async (req, res) => {
+  try {
+    const { base64 } = req.body;
+    if (!base64) return res.status(400).json({ error: 'base64 image required' });
+
+    const axios = require('axios');
+    const clientId = process.env.IMGUR_CLIENT_ID || 'a3fa206b0d912da'; // Generic public ID if none provided
+    const formData = new URLSearchParams();
+    formData.append('image', base64);
+    formData.append('type', 'base64');
+
+    const response = await axios.post('https://api.imgur.com/3/image', formData, {
+      headers: {
+        'Authorization': `Client-ID ${clientId}`
+      }
+    });
+
+    if (response.data && response.data.success) {
+      return res.status(201).json({ url: response.data.data.link });
+    } else {
+      return res.status(500).json({ error: 'Imgur upload failed' });
+    }
+  } catch (error) {
+    console.error('Imgur upload error:', error.response ? error.response.data : error.message);
+    return res.status(500).json({ error: 'Server error during image upload' });
   }
 });
 
