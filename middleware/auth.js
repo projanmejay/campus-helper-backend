@@ -1,9 +1,12 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET) {
-  throw new Error("JWT_SECRET is required for authentication middleware.");
+function getSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("JWT_SECRET is required for authentication middleware.");
+  }
+  return secret;
 }
 
 function createToken(user) {
@@ -13,7 +16,7 @@ function createToken(user) {
       email: user.email,
       username: user.username || null,
     },
-    JWT_SECRET,
+    getSecret(),
     { expiresIn: "7d" }
   );
 }
@@ -27,7 +30,7 @@ async function authenticate(req, res, next) {
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getSecret());
     const user = await User.findById(decoded.userId);
     if (!user) {
       return res.status(401).json({ error: "Unauthorized" });
