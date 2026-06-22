@@ -145,9 +145,7 @@ router.post("/:id/verify-payment", authenticate, async (req, res) => {
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    // Allow test_signature to pass in dev — remove in production
-    const isTest = razorpay_signature === "test_signature";
-    if (!isTest && expected !== razorpay_signature) {
+    if (expected !== razorpay_signature) {
       return res.status(400).json({ error: "Payment verification failed" });
     }
 

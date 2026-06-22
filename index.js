@@ -14,9 +14,10 @@ const { Resend }    = require("resend");
 const discussionRoutes = require("./routes/discussionRoutes");
 const rideRequestRoutes = require("./routes/rideRequestRoutes");
 const { createToken, authenticate } = require("./middleware/auth");
-const User  = require("./models/User");
-const Otp   = require("./models/otp");
-const Order = require("./models/order");
+const User        = require("./models/User");
+const Otp         = require("./models/otp");
+const Order       = require("./models/order");
+const ImageData   = require("./models/ImageData");
 const PasswordReset = require("./models/PasswordReset");
 
 const app = express();
@@ -557,7 +558,7 @@ app.post("/razorpay/webhook", async (req, res) => {
 /* ================= TAXI ============================== */
 /* ===================================================== */
 
-app.get("/rides", async (req, res) => {
+app.get("/rides", authenticate, async (req, res) => {
   try {
     const rides = await mongoose.connection.db
       .collection("rides")
@@ -571,7 +572,7 @@ app.get("/rides", async (req, res) => {
   }
 });
 
-app.post("/rides", async (req, res) => {
+app.post("/rides", authenticate, async (req, res) => {
   try {
     const { from, to, creator, seatsLeft, driverName, driverNumber, dateTime } = req.body;
 
@@ -582,7 +583,7 @@ app.post("/rides", async (req, res) => {
     const ride = await mongoose.connection.db.collection("rides").insertOne({
       from,
       to,
-      creator:      creator      || "Anonymous",
+      creator:      creator      || req.user.name || "Anonymous",
       seatsLeft:    seatsLeft    || 2,
       driverName:   driverName   || "",
       driverNumber: driverNumber || "",
@@ -598,7 +599,7 @@ app.post("/rides", async (req, res) => {
   }
 });
 
-app.get("/drivers", async (req, res) => {
+app.get("/drivers", authenticate, async (req, res) => {
   try {
     const drivers = await mongoose.connection.db
       .collection("drivers")
@@ -615,31 +616,36 @@ app.get("/drivers", async (req, res) => {
 /* ================= UPLOAD IMAGE ====================== */
 /* ===================================================== */
 
-app.post('/upload-image', async (req, res) => {
+// POST /upload-image — stores base64 image in MongoDB, returns a serving URL
+app.post('/upload-image', authenticate, async (req, res) => {
   try {
     const { base64 } = req.body;
     if (!base64) return res.status(400).json({ error: 'base64 image required' });
 
-    const axios = require('axios');
-    const clientId = process.env.IMGUR_CLIENT_ID || 'a3fa206b0d912da'; // Generic public ID if none provided
-    const formData = new URLSearchParams();
-    formData.append('image', base64);
-    formData.append('type', 'base64');
+    const id = require('uuid').v4().substring(0, 16);
+    await ImageData.create({ id, base64 });
 
-    const response = await axios.post('https://api.imgur.com/3/image', formData, {
-      headers: {
-        'Authorization': `Client-ID ${clientId}`
-      }
-    });
-
-    if (response.data && response.data.success) {
-      return res.status(201).json({ url: response.data.data.link });
-    } else {
-      return res.status(500).json({ error: 'Imgur upload failed' });
-    }
-  } catch (error) {
-    console.error('Imgur upload error:', error.response ? error.response.data : error.message);
+    const host = req.protocol + '://' + req.get('host');
+    const url  = `${host}/images/${id}`;
+    return res.status(201).json({ url });
+  } catch (err) {
+    console.error('UPLOAD IMAGE ERROR:', err);
     return res.status(500).json({ error: 'Server error during image upload' });
+  }
+});
+
+// GET /images/:id — serves the stored image as JPEG
+app.get('/images/:id', async (req, res) => {
+  try {
+    const imgData = await ImageData.findOne({ id: req.params.id });
+    if (!imgData) return res.status(404).send('Not found');
+
+    const buffer = Buffer.from(imgData.base64, 'base64');
+    res.set('Content-Type', 'image/jpeg');
+    res.set('Cache-Control', 'public, max-age=31536000');
+    res.send(buffer);
+  } catch (err) {
+    res.status(500).send('Server error');
   }
 });
 

@@ -4,11 +4,26 @@ const Discussion = require("../models/Discussion");
 const User = require("../models/User");
 const { authenticate } = require("../middleware/auth");
 
+/* ================= ADMIN AUTH MIDDLEWARE ================= */
+
+function adminAuth(req, res, next) {
+  const secret = process.env.ADMIN_SECRET;
+  if (!secret) {
+    // If not configured, deny all admin access
+    return res.status(403).json({ success: false, message: "Admin access not configured" });
+  }
+  const provided = req.headers["x-admin-secret"] || req.headers["x-admin-key"];
+  if (provided !== secret) {
+    return res.status(403).json({ success: false, message: "Forbidden: invalid admin secret" });
+  }
+  next();
+}
+
 /* ================= CREATE DISCUSSION POST ================= */
 
 router.post("/create", authenticate, async (req, res) => {
   try {
-    const { title, description, category } = req.body;
+    const { title, description, category, imageUrl } = req.body;
     const user = await User.findById(req.user.userId);
 
     if (!user || !user.username) {
@@ -23,6 +38,7 @@ router.post("/create", authenticate, async (req, res) => {
       description,
       author: user.username,
       category,
+      imageUrl: imageUrl || null,
     });
 
     await post.save();
@@ -257,3 +273,38 @@ router.post("/reply/vote", authenticate, async (req, res) => {
 });
 
 module.exports = router;
+
+/* ================= ADMIN ROUTES (require X-Admin-Secret header) ================= */
+
+// GET /discussion/admin/reports — list all posts with active reports
+router.get("/admin/reports", adminAuth, async (req, res) => {
+  try {
+    const posts = await Discussion.find({ "reports.0": { $exists: true } });
+    res.json({ success: true, reports: posts });
+  } catch (error) {
+    console.error("ADMIN REPORTS ERROR:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /discussion/admin/delete-post/:id — permanently delete a post
+router.post("/admin/delete-post/:id", adminAuth, async (req, res) => {
+  try {
+    await Discussion.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: "Post deleted" });
+  } catch (error) {
+    console.error("ADMIN DELETE ERROR:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /discussion/admin/resolve-report/:id — clear reports but keep post
+router.post("/admin/resolve-report/:id", adminAuth, async (req, res) => {
+  try {
+    await Discussion.findByIdAndUpdate(req.params.id, { $set: { reports: [] } });
+    res.json({ success: true, message: "Reports cleared" });
+  } catch (error) {
+    console.error("ADMIN RESOLVE ERROR:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
