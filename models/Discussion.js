@@ -43,6 +43,10 @@ const discussionSchema = new mongoose.Schema(
       type:     String,
       required: true,
     },
+    imageUrl: {
+      type: String,
+      default: null,
+    },
     category: {
       type:    String,
       default: "General",
