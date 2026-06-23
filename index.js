@@ -15,6 +15,7 @@ const discussionRoutes = require("./routes/discussionRoutes");
 const rideRequestRoutes = require("./routes/rideRequestRoutes");
 const eventRoutes = require("./routes/eventRoutes");
 const busRoutes = require("./routes/busRoutes");
+const menuRoutes = require("./routes/menuRoutes");
 const { createToken, authenticate } = require("./middleware/auth");
 const User        = require("./models/User");
 const Otp         = require("./models/otp");
@@ -68,6 +69,7 @@ app.use("/discussion", discussionRoutes);
 app.use("/ride-requests", rideRequestRoutes);
 app.use("/events", eventRoutes);
 app.use("/bus", busRoutes);
+app.use("/menu", menuRoutes);
 /* ------------------ SERVICES ------------------ */
 
 const razorpay = new Razorpay({
