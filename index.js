@@ -12,7 +12,7 @@ const otpGenerator  = require("otp-generator");
 const { Resend }    = require("resend");
 
 const discussionRoutes = require("./routes/discussionRoutes");
-const rideRequestRoutes = require("./routes/rideRequestRoutes");
+const taxiRoutes = require("./routes/taxi"); // Added new taxi routes
 const eventRoutes = require("./routes/eventRoutes");
 const busRoutes = require("./routes/busRoutes");
 const menuRoutes = require("./routes/menuRoutes");
@@ -23,6 +23,7 @@ const Order       = require("./models/order");
 const ImageData   = require("./models/ImageData");
 const PasswordReset = require("./models/PasswordReset");
 const { adminAuthenticate } = require("./middleware/admin_auth");
+const { initTaxiJobs } = require("./scripts/taxi_jobs"); // Import taxi jobs
 
 const app = express();
 
@@ -66,7 +67,7 @@ mongoose.connect(process.env.MONGO_URI)
 /* ------------------ ROUTES ------------------ */
 
 app.use("/discussion", discussionRoutes);
-app.use("/ride-requests", rideRequestRoutes);
+app.use("/taxi", taxiRoutes); // Replaced ride-requests with taxi
 app.use("/events", eventRoutes);
 app.use("/bus", busRoutes);
 app.use("/menu", menuRoutes);
@@ -668,64 +669,9 @@ app.post("/razorpay/webhook", async (req, res) => {
 });
 
 /* ===================================================== */
-/* ================= TAXI ============================== */
+/* ================= TAXI (Removed Old Routes) ========= */
 /* ===================================================== */
 
-app.get("/rides", authenticate, async (req, res) => {
-  try {
-    const rides = await mongoose.connection.db
-      .collection("rides")
-      .find({})
-      .sort({ createdAt: -1 })
-      .toArray();
-    res.json(rides);
-  } catch (err) {
-    console.error("GET RIDES ERROR:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.post("/rides", authenticate, async (req, res) => {
-  try {
-    const { from, to, creator, seatsLeft, driverName, driverNumber, dateTime } = req.body;
-
-    if (!from || !to) {
-      return res.status(400).json({ error: "from and to are required" });
-    }
-
-    const ride = await mongoose.connection.db.collection("rides").insertOne({
-      from,
-      to,
-      creator:      creator      || req.user.name || "Anonymous",
-      seatsLeft:    seatsLeft    || 2,
-      driverName:   driverName   || "",
-      driverNumber: driverNumber || "",
-      dateTime:     dateTime     || "Today",
-      createdAt:    new Date(),
-    });
-
-    res.status(201).json({ success: true, rideId: ride.insertedId });
-
-  } catch (err) {
-    console.error("POST RIDE ERROR:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-app.get("/drivers", authenticate, async (req, res) => {
-  try {
-    const drivers = await mongoose.connection.db
-      .collection("drivers")
-      .find({})
-      .toArray();
-    res.json(drivers);
-  } catch (err) {
-    console.error("GET DRIVERS ERROR:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-/* ===================================================== */
 /* ================= ADMIN AUTH ====================== */
 app.post('/admin/login', async (req, res) => {
   try {
@@ -797,4 +743,7 @@ app.listen(PORT, () => {
   console.log(`📧 EMAIL_FROM      : ${process.env.EMAIL_FROM      || "NOT SET ❌"}`);
   console.log(`🔑 RESEND_API_KEY  : ${process.env.RESEND_API_KEY  ? "set ✅" : "NOT SET ❌"}`);
   console.log(`💳 RAZORPAY_KEY_ID : ${process.env.RAZORPAY_KEY_ID ? "set ✅" : "NOT SET ❌"}`);
+  
+  // Initialize Background Jobs
+  initTaxiJobs();
 });
