@@ -83,14 +83,17 @@ router.get('/:canteenId', async (req, res) => {
     // Group by category
     const sectionMap = {};
     for (const item of items) {
-      if (!sectionMap[item.category]) {
-        sectionMap[item.category] = {
-          title: item.category,
-          sectionOrder: item.sectionOrder || 0,
+      const itemObj = item.toObject();
+      itemObj.id = itemObj.id || itemObj._id.toString();
+
+      if (!sectionMap[itemObj.category]) {
+        sectionMap[itemObj.category] = {
+          title: itemObj.category,
+          sectionOrder: itemObj.sectionOrder || 0,
           items: []
         };
       }
-      sectionMap[item.category].items.push(item);
+      sectionMap[itemObj.category].items.push(itemObj);
     }
     
     const sections = Object.values(sectionMap);
@@ -110,9 +113,10 @@ router.get('/:canteenId', async (req, res) => {
 router.post('/:canteenId', async (req, res) => {
   try {
     const { canteenId } = req.params;
-    const { category, name, price, isVeg } = req.body;
+    const { id, category, name, price, isVeg } = req.body;
     
     const item = await MenuItem.create({
+      id,
       canteenId,
       category,
       name,

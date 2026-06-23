@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 
 const menuItemSchema = new mongoose.Schema({
+  id: { type: String },
   canteenId: { type: String, required: true },
   category: { type: String, required: true },
   name: { type: String, required: true },
