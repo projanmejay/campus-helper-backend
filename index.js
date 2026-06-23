@@ -14,6 +14,7 @@ const { Resend }    = require("resend");
 const discussionRoutes = require("./routes/discussionRoutes");
 const rideRequestRoutes = require("./routes/rideRequestRoutes");
 const eventRoutes = require("./routes/eventRoutes");
+const busRoutes = require("./routes/busRoutes");
 const { createToken, authenticate } = require("./middleware/auth");
 const User        = require("./models/User");
 const Otp         = require("./models/otp");
@@ -66,6 +67,7 @@ mongoose.connect(process.env.MONGO_URI)
 app.use("/discussion", discussionRoutes);
 app.use("/ride-requests", rideRequestRoutes);
 app.use("/events", eventRoutes);
+app.use("/bus", busRoutes);
 /* ------------------ SERVICES ------------------ */
 
 const razorpay = new Razorpay({
