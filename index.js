@@ -19,6 +19,7 @@ const Otp         = require("./models/otp");
 const Order       = require("./models/order");
 const ImageData   = require("./models/ImageData");
 const PasswordReset = require("./models/PasswordReset");
+const { adminAuthenticate } = require("./middleware/admin_auth");
 
 const app = express();
 
@@ -617,7 +618,7 @@ app.get("/drivers", authenticate, async (req, res) => {
 /* ===================================================== */
 
 // POST /upload-image — stores base64 image in MongoDB, returns a serving URL
-app.post('/upload-image', authenticate, async (req, res) => {
+app.post('/upload-image', adminAuthenticate, async (req, res) => {
   try {
     const { base64 } = req.body;
     if (!base64) return res.status(400).json({ error: 'base64 image required' });
