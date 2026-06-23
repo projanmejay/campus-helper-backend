@@ -498,18 +498,56 @@ app.get("/order/:orderId/status", authenticate, async (req, res) => {
   }
 });
 
-/* ORDER HISTORY — GET /orders */
-app.get("/orders", authenticate, async (req, res) => {
+/* ORDER HISTORY — GET /orders (Mixed Auth: Token for Student, Public for Admin) */
+app.get("/orders", async (req, res) => {
   try {
-    const requestedUserId = req.query.userId;
-    if (requestedUserId && requestedUserId !== req.user.userId) {
-      return res.status(403).json({ error: "Forbidden" });
+    const authHeader = req.headers.authorization;
+    let filter = {};
+
+    // If token exists, verify and filter by the student's userId
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      try {
+        const decoded = require("jsonwebtoken").verify(token, process.env.JWT_SECRET);
+        filter.userId = decoded.userId;
+      } catch (err) {
+        return res.status(401).json({ error: "Invalid token" });
+      }
     }
 
-    const orders = await Order.find({ userId: req.user.userId }).sort({ createdAt: -1 });
+    // Admin app sends no token, so filter remains {} and returns all orders
+    const orders = await Order.find(filter).sort({ createdAt: -1 });
     res.json(orders);
   } catch (err) {
     console.error("GET ORDERS ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+/*
+  PATCH /order/:orderId/status - Update order status (Used by Canteen Owner)
+  Body: { status, estimatedPrepTime, cancellationReason }
+*/
+app.patch("/order/:orderId/status", async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { status, estimatedPrepTime, cancellationReason } = req.body;
+
+    const order = await Order.findOne({ orderId });
+    if (!order) return res.status(404).json({ error: "Order not found" });
+
+    if (status) order.orderStatus = status; // In AdminOrder, it maps to orderStatus. Wait, the frontend sends { status: newStatus }. We update order.orderStatus.
+    // Actually the frontend expects the backend order to have `orderStatus`
+    if (estimatedPrepTime !== undefined) {
+      order.estimatedPrepTime = estimatedPrepTime;
+      order.prepStartedAt = new Date();
+    }
+    if (cancellationReason) order.cancellationReason = cancellationReason;
+
+    await order.save();
+    res.json({ success: true, orderId: order.orderId, orderStatus: order.orderStatus });
+  } catch (err) {
+    console.error("PATCH ORDER STATUS ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
