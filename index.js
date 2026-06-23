@@ -614,6 +614,28 @@ app.get("/drivers", authenticate, async (req, res) => {
 });
 
 /* ===================================================== */
+/* ================= ADMIN AUTH ====================== */
+app.post('/admin/login', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Basic ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const base64 = authHeader.split(' ')[1];
+    const credentials = Buffer.from(base64, 'base64').toString('utf8');
+    const [adminId, adminPwd] = credentials.split(':');
+    const expectedId = process.env.ADMIN_ID;
+    const expectedPwd = process.env.ADMIN_PASSWORD;
+    if (adminId === expectedId && adminPwd === expectedPwd) {
+      const token = require('jsonwebtoken').sign({ admin: true }, process.env.JWT_SECRET, { expiresIn: '7d' });
+      return res.json({ token });
+    }
+    return res.status(401).json({ error: 'Invalid admin credentials' });
+  } catch (err) {
+    console.error('ADMIN LOGIN ERROR:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
 /* ================= UPLOAD IMAGE ====================== */
 /* ===================================================== */
 
