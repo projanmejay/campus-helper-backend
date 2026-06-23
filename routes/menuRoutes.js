@@ -4,12 +4,12 @@ const Canteen = require('../models/Canteen');
 const MenuItem = require('../models/MenuItem');
 
 const DEFAULT_CANTEENS = [
-  { id: 'azad_hall', name: 'AZAD Canteen' },
-  { id: 'llr_canteen', name: 'LLR Canteen' },
-  { id: 'vs_canteen', name: 'VS Canteen' },
-  { id: 'hjb_canteen', name: 'HJB Canteen' },
-  { id: 'rk_hall', name: 'RK Canteen' },
-  { id: 'rp_canteen', name: 'RP Canteen' },
+  { canteenId: 'azad_hall', name: 'AZAD Canteen' },
+  { canteenId: 'llr_canteen', name: 'LLR Canteen' },
+  { canteenId: 'vs_canteen', name: 'VS Canteen' },
+  { canteenId: 'hjb_canteen', name: 'HJB Canteen' },
+  { canteenId: 'rk_hall', name: 'RK Canteen' },
+  { canteenId: 'rp_canteen', name: 'RP Canteen' },
 ];
 
 // GET /menu/canteens - Fetch all canteens
@@ -26,7 +26,7 @@ router.get('/canteens', async (req, res) => {
     // Ensure every canteen has a string `id` field (the schema field, not Mongoose's _id virtual)
     const canteenList = canteens.map(c => ({
       ...c,
-      id: c.id || c._id.toString(),        // schema 'id' like 'azad_hall'
+      id: c.canteenId || c.id || c._id.toString(),        // schema 'canteenId' like 'azad_hall'
       _id: c._id.toString(),
     }));
     
@@ -42,7 +42,7 @@ router.get('/canteens', async (req, res) => {
 // GET /menu/canteen/:canteenId - Get specific canteen profile
 router.get('/canteen/:canteenId', async (req, res) => {
   try {
-    const canteen = await Canteen.findOne({ id: req.params.canteenId });
+    const canteen = await Canteen.findOne({ canteenId: req.params.canteenId });
     if (!canteen) return res.status(404).json({ error: 'Canteen not found' });
     res.json(canteen);
   } catch (err) {
@@ -55,7 +55,7 @@ router.get('/canteen/:canteenId', async (req, res) => {
 router.patch('/canteen/:canteenId/status', async (req, res) => {
   try {
     const { status } = req.body;
-    await Canteen.findOneAndUpdate({ id: req.params.canteenId }, { status });
+    await Canteen.findOneAndUpdate({ canteenId: req.params.canteenId }, { status });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -66,7 +66,7 @@ router.patch('/canteen/:canteenId/status', async (req, res) => {
 router.patch('/canteen/:canteenId/fee', async (req, res) => {
   try {
     const { packagingFee } = req.body;
-    await Canteen.findOneAndUpdate({ id: req.params.canteenId }, { packagingFee });
+    await Canteen.findOneAndUpdate({ canteenId: req.params.canteenId }, { packagingFee });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -77,7 +77,7 @@ router.patch('/canteen/:canteenId/fee', async (req, res) => {
 router.patch('/canteen/:canteenId/phone', async (req, res) => {
   try {
     const { phone } = req.body;
-    await Canteen.findOneAndUpdate({ id: req.params.canteenId }, { phone });
+    await Canteen.findOneAndUpdate({ canteenId: req.params.canteenId }, { phone });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
