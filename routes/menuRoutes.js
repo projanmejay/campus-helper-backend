@@ -15,20 +15,20 @@ const DEFAULT_CANTEENS = [
 // GET /menu/canteens - Fetch all canteens
 router.get('/canteens', async (req, res) => {
   try {
-    let canteens = await Canteen.find();
+    let canteens = await Canteen.find().lean(); // lean() gives plain JS objects, no Mongoose virtuals
     
     // Seed canteens if empty
     if (canteens.length === 0) {
       await Canteen.insertMany(DEFAULT_CANTEENS);
-      canteens = await Canteen.find();
+      canteens = await Canteen.find().lean();
     }
     
-    // Always return a guaranteed string `id` field (not just `_id`)
-    const canteenList = canteens.map(c => {
-      const obj = c.toObject();
-      obj.id = obj.id || obj._id.toString();
-      return obj;
-    });
+    // Ensure every canteen has a string `id` field (the schema field, not Mongoose's _id virtual)
+    const canteenList = canteens.map(c => ({
+      ...c,
+      id: c.id || c._id.toString(),        // schema 'id' like 'azad_hall'
+      _id: c._id.toString(),
+    }));
     
     res.json({ canteens: canteenList });
   } catch (err) {
@@ -36,6 +36,7 @@ router.get('/canteens', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 
 
 // GET /menu/canteen/:canteenId - Get specific canteen profile
@@ -86,31 +87,29 @@ router.patch('/canteen/:canteenId/phone', async (req, res) => {
 // GET /menu/:canteenId - Get menu structured in sections
 router.get('/:canteenId', async (req, res) => {
   try {
-    const items = await MenuItem.find({ canteenId: req.params.canteenId });
+    const items = await MenuItem.find({ canteenId: req.params.canteenId }).lean();
     
     // Group by category
     const sectionMap = {};
     for (const item of items) {
-      const itemObj = item.toObject();
-      // Always guarantee a string `id` for the Flutter app
-      itemObj.id = (itemObj.id && itemObj.id !== '') ? itemObj.id : itemObj._id.toString();
-      // Also expose _id as string for Canteen Owner app reorder operations
-      itemObj._id = itemObj._id.toString();
+      // lean() gives plain objects — safe to mutate directly
+      item.id = (item.id && item.id !== '') ? item.id : item._id.toString();
+      item._id = item._id.toString();
 
-      if (!sectionMap[itemObj.category]) {
-        sectionMap[itemObj.category] = {
-          title: itemObj.category,
-          sectionOrder: itemObj.sectionOrder || 0,
+      if (!sectionMap[item.category]) {
+        sectionMap[item.category] = {
+          title: item.category,
+          sectionOrder: item.sectionOrder || 0,
           items: []
         };
       }
-      sectionMap[itemObj.category].items.push(itemObj);
+      sectionMap[item.category].items.push(item);
     }
     
     const sections = Object.values(sectionMap);
     sections.sort((a, b) => a.sectionOrder - b.sectionOrder);
     for (const section of sections) {
-      section.items.sort((a, b) => a.itemOrder - b.itemOrder);
+      section.items.sort((a, b) => (a.itemOrder || 0) - (b.itemOrder || 0));
     }
     
     res.json({ sections });
@@ -119,6 +118,7 @@ router.get('/:canteenId', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 
 
 // POST /menu/:canteenId - Add new menu item
