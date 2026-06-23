@@ -132,6 +132,7 @@ router.post('/verify-advance', authenticate, async (req, res) => {
 
     const bookingAmountPaid = settings.bookingAdvance * request.passengerCount;
     request.bookingAmountPaid = bookingAmountPaid;
+    request.razorpayAdvancePaymentId = razorpay_payment_id;
     await request.save();
 
     res.json({ success: true, message: 'Booking advance paid. You are in the queue!' });
@@ -221,6 +222,7 @@ router.post('/verify-final', authenticate, async (req, res) => {
     if (!request) return res.status(404).json({ error: 'Ride request not found' });
 
     request.status = 'CONFIRMED';
+    request.razorpayFinalPaymentId = razorpay_payment_id;
     await request.save();
 
     // Update passenger status in the group
@@ -295,13 +297,11 @@ router.put('/settings', adminJwtAuthenticate, async (req, res) => {
   try {
     const updateData = req.body;
     let settings = await TaxiSetting.findOne();
-
     if (!settings) {
       settings = await TaxiSetting.create(updateData);
     } else {
       settings = await TaxiSetting.findOneAndUpdate({}, updateData, { new: true, runValidators: true });
     }
-
     res.json({ success: true, settings });
   } catch (err) {
     console.error('UPDATE TAXI SETTINGS ERROR:', err);
@@ -309,4 +309,125 @@ router.put('/settings', adminJwtAuthenticate, async (req, res) => {
   }
 });
 
+
+/* ===================================================== */
+/* =========== ADMIN — RIDE MANAGEMENT ================= */
+/* ===================================================== */
+
+// GET all ride requests (filterable by status)
+router.get('/admin/requests', adminJwtAuthenticate, async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = status ? { status } : {};
+    const requests = await RideRequest.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(200);
+    const total = await RideRequest.countDocuments(filter);
+    res.json({ success: true, requests, total });
+  } catch (err) {
+    console.error('ADMIN GET REQUESTS ERROR:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST cancel a ride request (with optional Razorpay refund)
+router.post('/admin/cancel/:requestId', adminJwtAuthenticate, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const { processRefund = false } = req.body;
+
+    const request = await RideRequest.findById(requestId);
+    if (!request) return res.status(404).json({ error: 'Ride request not found' });
+    if (request.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'Already cancelled' });
+    }
+
+    let refundAmount = 0;
+    let refundInitiated = false;
+
+    if (processRefund && request.bookingAmountPaid > 0) {
+      refundAmount = request.bookingAmountPaid;
+      const paymentIdToRefund = request.razorpayFinalPaymentId || request.razorpayAdvancePaymentId;
+      if (paymentIdToRefund) {
+        try {
+          await razorpay.payments.refund(paymentIdToRefund, {
+            amount: Math.round(refundAmount * 100),
+            speed: 'normal',
+            notes: { reason: 'Admin cancellation' },
+          });
+          refundInitiated = true;
+          console.log(`✅ Refund initiated for ${requestId}: ₹${refundAmount}`);
+        } catch (rzpErr) {
+          console.error(`❌ Razorpay refund failed for ${requestId}:`, rzpErr.error?.description || rzpErr.message);
+          // Don't block cancellation even if refund API fails
+        }
+      }
+    }
+
+    request.status = 'CANCELLED';
+    request.cancelledByAdmin = true;
+    request.refundInitiated = refundInitiated;
+    request.refundAmount = refundAmount;
+    await request.save();
+
+    // Update group — remove passenger, recalculate
+    if (request.groupId) {
+      const group = await RideGroup.findById(request.groupId);
+      if (group) {
+        const passenger = group.passengers.find(
+          p => p.requestId.toString() === request._id.toString()
+        );
+        if (passenger) passenger.status = 'CANCELLED';
+
+        const activePassengers = group.passengers.filter(p => p.status !== 'CANCELLED');
+        group.finalPassengerCount = activePassengers.reduce((sum, p) => sum + p.passengerCount, 0);
+        if (activePassengers.length === 0) group.status = 'CANCELLED';
+        await group.save();
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Cancelled${refundInitiated ? ` with ₹${refundAmount} refund initiated` : ''}`,
+      refundInitiated,
+      refundAmount,
+    });
+  } catch (err) {
+    console.error('ADMIN CANCEL REQUEST ERROR:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE a ride request permanently
+router.delete('/admin/delete/:requestId', adminJwtAuthenticate, async (req, res) => {
+  try {
+    const { requestId } = req.params;
+    const request = await RideRequest.findById(requestId);
+    if (!request) return res.status(404).json({ error: 'Ride request not found' });
+
+    if (request.groupId) {
+      const group = await RideGroup.findById(request.groupId);
+      if (group) {
+        group.passengers = group.passengers.filter(
+          p => p.requestId.toString() !== request._id.toString()
+        );
+        const active = group.passengers.filter(p => p.status !== 'CANCELLED');
+        group.finalPassengerCount = active.reduce((sum, p) => sum + p.passengerCount, 0);
+        if (group.passengers.length === 0) {
+          await RideGroup.findByIdAndDelete(group._id);
+        } else {
+          await group.save();
+        }
+      }
+    }
+
+    await RideRequest.findByIdAndDelete(requestId);
+    res.json({ success: true, message: 'Deleted permanently' });
+  } catch (err) {
+    console.error('ADMIN DELETE REQUEST ERROR:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;
+

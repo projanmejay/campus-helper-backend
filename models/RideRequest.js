@@ -5,8 +5,8 @@ const rideRequestSchema = new mongoose.Schema(
     userId: { type: String, required: true },
     pickup: { type: String, required: true },
     destination: { type: String, required: true },
-    rideDate: { type: String, required: true }, // Format: YYYY-MM-DD
-    rideTime: { type: String, required: true }, // Format: HH:mm
+    rideDate: { type: String, required: true },
+    rideTime: { type: String, required: true },
     passengerCount: { type: Number, required: true },
     contactNumber: { type: String, required: true },
     bookingAmountPaid: { type: Number, default: 0 },
@@ -16,6 +16,13 @@ const rideRequestSchema = new mongoose.Schema(
       default: 'PENDING_GROUPING',
     },
     groupId: { type: mongoose.Schema.Types.ObjectId, ref: 'RideGroup', default: null },
+    // Razorpay tracking (for refunds)
+    razorpayAdvancePaymentId: { type: String, default: null },
+    razorpayFinalPaymentId:   { type: String, default: null },
+    // Admin cancellation tracking
+    cancelledByAdmin:  { type: Boolean, default: false },
+    refundInitiated:   { type: Boolean, default: false },
+    refundAmount:      { type: Number, default: 0 },
   },
   { timestamps: true }
 );
