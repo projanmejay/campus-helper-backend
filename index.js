@@ -377,24 +377,37 @@ app.post('/auth/reset-password', async (req, res) => {
 */
 app.post("/order", authenticate, async (req, res) => {
   try {
-    const { canteen, items, totalAmount, orderType, deliveryLocation, deliveryDetails } = req.body;
+    const { canteen, canteenId, items, totalAmount, amount, orderType, deliveryLocation, deliveryDetails, instructions, packagingFee, platformFee, deliveryFee } = req.body;
 
     if (!canteen || !items || !totalAmount) {
       return res.status(400).json({ error: "canteen, items, and totalAmount are required" });
     }
 
+    // Fetch user info to denormalize into order (so canteen sees who ordered)
+    const user = await User.findById(req.user.userId);
+
     const order = await Order.create({
       orderId:          uuidv4(),
       userId:           req.user.userId,
       canteen,
+      canteenId:        canteenId || null,
       items,
       totalAmount,
-      amount:           totalAmount,
+      amount:           amount || totalAmount,
       currency:         "INR",
       orderType:        orderType        || "Takeaway",
       deliveryLocation: deliveryLocation || null,
       deliveryDetails:  deliveryDetails  || null,
+      instructions:     instructions     || null,
       status:           "PENDING_PAYMENT",
+      orderStatus:      "PLACED",
+      packagingFee:     packagingFee     || 0,
+      platformFee:      platformFee      || 0,
+      deliveryFee:      deliveryFee      || 0,
+      // Denormalize user info
+      userName:         user?.name  || null,
+      userEmail:        user?.email || null,
+      userHall:         user?.hall  || null,
     });
 
     res.status(201).json({ success: true, orderId: order.orderId });
@@ -536,9 +549,9 @@ app.patch("/order/:orderId/status", async (req, res) => {
     const order = await Order.findOne({ orderId });
     if (!order) return res.status(404).json({ error: "Order not found" });
 
-    if (status) order.orderStatus = status; // In AdminOrder, it maps to orderStatus. Wait, the frontend sends { status: newStatus }. We update order.orderStatus.
-    // Actually the frontend expects the backend order to have `orderStatus`
-    if (estimatedPrepTime !== undefined) {
+    // Canteen owner sends `status` field which maps to the kitchen `orderStatus`
+    if (status) order.orderStatus = status;
+    if (estimatedPrepTime !== undefined && estimatedPrepTime !== null) {
       order.estimatedPrepTime = estimatedPrepTime;
       order.prepStartedAt = new Date();
     }

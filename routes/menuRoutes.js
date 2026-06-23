@@ -23,12 +23,20 @@ router.get('/canteens', async (req, res) => {
       canteens = await Canteen.find();
     }
     
-    res.json({ canteens });
+    // Always return a guaranteed string `id` field (not just `_id`)
+    const canteenList = canteens.map(c => {
+      const obj = c.toObject();
+      obj.id = obj.id || obj._id.toString();
+      return obj;
+    });
+    
+    res.json({ canteens: canteenList });
   } catch (err) {
     console.error('GET CANTEENS ERROR:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 
 // GET /menu/canteen/:canteenId - Get specific canteen profile
 router.get('/canteen/:canteenId', async (req, res) => {
@@ -84,7 +92,10 @@ router.get('/:canteenId', async (req, res) => {
     const sectionMap = {};
     for (const item of items) {
       const itemObj = item.toObject();
-      itemObj.id = itemObj.id || itemObj._id.toString();
+      // Always guarantee a string `id` for the Flutter app
+      itemObj.id = (itemObj.id && itemObj.id !== '') ? itemObj.id : itemObj._id.toString();
+      // Also expose _id as string for Canteen Owner app reorder operations
+      itemObj._id = itemObj._id.toString();
 
       if (!sectionMap[itemObj.category]) {
         sectionMap[itemObj.category] = {
@@ -108,6 +119,7 @@ router.get('/:canteenId', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 
 // POST /menu/:canteenId - Add new menu item
 router.post('/:canteenId', async (req, res) => {
