@@ -34,6 +34,7 @@ const orderSchema = new mongoose.Schema(
     packagingFee:     { type: Number, default: 0 },
     platformFee:      { type: Number, default: 0 },
     deliveryFee:      { type: Number, default: 0 },
+    ratedItems:       { type: [String], default: [] },
   },
   { timestamps: true }
 );

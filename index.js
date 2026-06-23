@@ -495,19 +495,44 @@ app.post("/razorpay/verify-payment", authenticate, async (req, res) => {
 
 /*
   STEP 4 — Flutter: GET /order/:orderId/status
-  Returns: { status } — "PENDING_PAYMENT" | "PAID" | "FAILED"
+  Returns full order data including status, orderType, codes, etc.
+  Auth optional — if token present, verifies userId matches.
 */
-app.get("/order/:orderId/status", authenticate, async (req, res) => {
+app.get("/order/:orderId/status", async (req, res) => {
   try {
-    const order = await Order.findOne({ orderId: req.params.orderId, userId: req.user.userId });
+    const { orderId } = req.params;
+    let filter = { orderId };
 
-    if (!order) return res.status(404).json({ error: "Order not found" });
+    // If token provided, scope to that user's order
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const decoded = require('jsonwebtoken').verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
+        filter.userId = decoded.userId;
+      } catch (_) {
+        return res.status(401).json({ error: 'Invalid token' });
+      }
+    }
 
-    res.json({ success: true, status: order.status, orderId: order.orderId });
+    const order = await Order.findOne(filter);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
 
+    res.json({
+      success: true,
+      orderId: order.orderId,
+      status: order.status,
+      orderStatus: order.orderStatus,
+      orderType: order.orderType,
+      canteen: order.canteen,
+      pickupCode: order.pickupCode,
+      deliveryCode: order.deliveryCode,
+      canteenPhone: order.canteenPhone || null,
+      estimatedPrepTime: order.estimatedPrepTime,
+      prepStartedAt: order.prepStartedAt,
+    });
   } catch (err) {
-    console.error("GET ORDER STATUS ERROR:", err);
-    res.status(500).json({ error: "Server error" });
+    console.error('GET ORDER STATUS ERROR:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -562,6 +587,36 @@ app.patch("/order/:orderId/status", async (req, res) => {
   } catch (err) {
     console.error("PATCH ORDER STATUS ERROR:", err);
     res.status(500).json({ error: "Server error" });
+  }
+});
+
+/* POST /orders/:orderId/rate - Rate an item in a completed order */
+app.post('/orders/:orderId/rate', authenticate, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { itemName, score } = req.body;
+    if (!itemName || !score) return res.status(400).json({ error: 'itemName and score required' });
+
+    const order = await Order.findOne({ orderId, userId: req.user.userId });
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    if (!order.ratedItems) order.ratedItems = [];
+    if (order.ratedItems.includes(itemName)) return res.status(400).json({ error: 'Already rated' });
+    order.ratedItems.push(itemName);
+    await order.save();
+
+    const MenuItem = require('./models/MenuItem');
+    const item = await MenuItem.findOne({ name: itemName, canteenId: order.canteenId });
+    if (item) {
+      item.ratingSum = (item.ratingSum || 0) + score;
+      item.ratingCount = (item.ratingCount || 0) + 1;
+      await item.save();
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('RATE ITEM ERROR:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 

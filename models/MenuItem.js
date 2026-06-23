@@ -9,7 +9,9 @@ const menuItemSchema = new mongoose.Schema({
   isVeg: { type: Boolean, default: true },
   isAvailable: { type: Boolean, default: true },
   itemOrder: { type: Number, default: 0 },
-  sectionOrder: { type: Number, default: 0 }
+  sectionOrder: { type: Number, default: 0 },
+  ratingSum: { type: Number, default: 0 },
+  ratingCount: { type: Number, default: 0 }
 });
 
 module.exports = mongoose.model("MenuItem", menuItemSchema);
