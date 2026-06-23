@@ -11,7 +11,16 @@ const taxiSettingSchema = new mongoose.Schema(
     paymentDeadlineHours: { type: Number, default: 24 },
     fixedTaxiFare: { type: Number, default: 1200 },
     remindersEnabled: { type: Boolean, default: true },
-    reminderIntervals: { type: Number, default: 12 }, // hours
+    reminderIntervals: { type: Number, default: 12 },
+    // Pickup and destination location lists (admin-configurable)
+    pickupLocations: {
+      type: [String],
+      default: ['RK Hall', 'Azad Hall', 'LBS Hall', 'MMM Hall'],
+    },
+    destinations: {
+      type: [String],
+      default: ['Kharagpur Station', 'Kharagpur Town', 'Kolkata Airport', 'Vidyasagar Hospital'],
+    },
   },
   { timestamps: true }
 );
